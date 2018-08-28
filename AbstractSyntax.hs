@@ -23,16 +23,17 @@ data APeg = Lambda
          | Alt [APeg]
          | AEAttr [(Var,Expr)] -- The list of attributions of expressions to varaibales
          deriving Show
-              
+
 data Expr = Str String 
           | EmptyMap  
           | MetaPeg MAPeg
+          | MetaExp MExpr 
           | EVar Var
+          | ExtRule Expr Expr Expr -- ExtRule  Grammar RuleName Apeg
+          | MkRule NonTerminal [(Type,Var)] [Expr] Expr
           | Mp [(String,Expr)] 
           | MapIns Expr String Expr -- Map insertion method
           | MapAcces Expr Expr         -- Map Access method
-          | ExtRule NonTerminal MAPeg
-          | MkRule NonTerminal [(Type,Var)] [MExpr] MAPeg
           deriving Show
           
 
@@ -54,17 +55,33 @@ data MExpr = MkStr String
            deriving Show
 
 data Type = TyStr
-          | TyMetaCons Type
+          | TyMetaPeg Type
+          | TyMetaExp Type
           | TyLanguage -- This type is to be attributed to Grammar whose all rules are correct.
           | TyMap Type
           deriving (Show, Eq)
 
 
+
+-- =================== AST Manipulation Utilities =================== --
+                                         
 fetch :: ApegGrm -> String -> ApegRule
 fetch (x@(ApegRule nt _ _ _  ):xs) s
     | nt == s = x
     | otherwise = fetch xs s
     
+mkAltBody :: APeg -> APeg -> APeg
+mkAltBody (Alt xs) y = Alt (xs ++ [y])
+mkAltBody x y = Alt [x,y]
+    
+grmExtRule :: ApegGrm -> NonTerminal -> APeg -> ApegGrm
+grmExtRule [] _ _ = []
+grmExtRule (x@(ApegRule nt inh syn body):xs) nt' newAlt 
+    | nt == nt' = (ApegRule nt inh syn (mkAltBody body newAlt)):xs
+    | otherwise = x: grmExtRule xs nt' newAlt
+    
+    
+-- =================== Show Utilities =================== --
 
 prec :: APeg -> Int
 prec  Lambda = 0

@@ -11,8 +11,16 @@ type TyRuleEnv = M.Map String Type -- All the variables in the scope of a rule
 type Error   = [Int]
 
 type Input = String
-                
-type APegSt = State (ApegGrm, VEnv, Input, Bool)
+
+type ApegTuple = (ApegGrm, -- The "Current" Grammar (Initially g0)
+                  VEnv,  -- A stack of value enviroments   
+                  TyEnv,   -- A Type Enviroment of rule and its variables. 
+                  String,  -- the current string accept by the parser on the current rule.
+                  Input,   -- The current input state. 
+                  Bool)    -- The Result of las operation
+
+-- State for the APEG interpreter: 
+type APegSt = State (ApegTuple) 
 
 data Value = VStr String
            | VMap VEnv
@@ -22,6 +30,8 @@ data Value = VStr String
            | Undefined
            deriving Show
 
+zeroSt :: ApegGrm -> String -> ApegTuple
+zeroSt grm s = (grm,M.empty ,M.empty, [],s,True)
 
 valIsMExpr :: Value -> Bool
 valIsMExpr (VExp _) = True
@@ -46,30 +56,50 @@ matchAll xs ys = (and $ zipWith (==) xs ys) && ((length xs) == (length ys))
 -- inferType re (MkEmptyMap) = TyMap TyStr
 -- inferType re (MkVar v)    = maybe (re !? v) ()
 
-
-unMeta :: MAPeg -> APeg
-unMeta MkLambda           = Lambda
-unMeta (MkCal nt inh syn) = NT nt (map unMetaE inh) (map unMetaE syn)
-unMeta (MkKle e)          = Kle (unMeta e)
-unMeta (MkNot e)          = Not (unMeta e)
-unMeta (MkSeq xs)         = Seq (map unMeta xs)
-unMeta (MkAlt xs)         = Alt (map unMeta xs)
-unMeta (MkAE xs)          = AEAttr $ map (\(v,e) -> (v,unMetaE e)) xs
-
-unMetaE :: MExpr -> Expr
-unMetaE (MkStr s)  = Str s
-unMetaE (MkEmptyMap) = EmptyMap
-unMetaE (MkVar v) = EVar v
-unMetaE (MkMp xs) = Mp (map (\(v,e) -> (v,unMetaE e)) xs)
-unMetaE (MkMapIns eb s ee) = MapIns (unMetaE eb) s (unMetaE ee)
-unMetaE (MkMapAcces me ma ) = MapAcces (unMetaE me) (unMetaE ma) 
+-- unMetaE :: MExpr -> Expr
+-- unMetaE (MkStr s)  = Str s
+-- unMetaE (MkEmptyMap) = EmptyMap
+-- unMetaE (MkVar v) = EVar v
+-- unMetaE (MkMp xs) = Mp (map (\(v,e) -> (v,unMetaE e)) xs)
+-- unMetaE (MkMapIns eb s ee) = MapIns (unMetaE eb) s (unMetaE ee)
+-- unMetaE (MkMapAcces me ma ) = MapAcces (unMetaE me) (unMetaE ma) 
 
 
 -- =================== State TAD related Functions =================== --
+
+-- Projections:
+
+language :: APegSt (ApegGrm)
+language = get >>= \(grm,env,tyEnv,reckon,inp,res) -> return grm
+
 var :: String -> APegSt Value
-var s = get >>= (\(grm,env,inp,res) -> case env M.!? s of 
-                                         Nothing -> fail ("Undefined varibale " ++ s)
-                                         Just v   -> return v)
+var s = get >>= (\(grm,env,tyEnv,reckon,inp,res) -> case env M.!? s of 
+                                                      Nothing -> fail ("Undefined varibale " ++ s)
+                                                      Just v   -> return v)
+
+
+prefix :: String -> String -> (String,String)
+prefix xs ys = test (splitAt (length xs) ys)
+   where
+       test (p,zs)
+           | p == xs = (p,zs)
+           | otherwise = ([],ys)
+
+patternMatch :: String -> APegSt ()
+patternMatch s = do (grm,env,tyEnv,reckon,inp,res) <- get
+                    case prefix s inp of
+                         ([],_) ->  put (grm,env,tyEnv,reckon,inp,False)
+                         (xs,ys) -> put (grm,env,tyEnv,reckon++xs,ys,True)
+                    
+
+isOk :: APegSt (Bool)
+isOk = get >>= \(grm,env,tyEnv,reckon,inp,res) -> return res
+
+done :: APegSt ()
+done =  get >>= \(grm,env,tyEnv,reckon,inp,res) -> put (grm,env,tyEnv,reckon,inp,True) 
+
+pfail :: APegSt ()
+pfail = modify (\(grm,env,tyenv,reckon,inp,r) -> (grm,env,tyenv,reckon,inp,False))
 
 ruleCreate :: String -> [(Type,Var)] -> [Value] -> Value -> APegSt (Value)
 ruleCreate s inh syn b
@@ -83,8 +113,21 @@ dynRule _ _ _ = fail "Unproper attempt to compose an existing rule !"
 
 -- =================== Monad Utilities =================== --
 
-pfail :: APegSt ()
-pfail = modify (\(grm,env,inp,r) -> (grm,env,inp,False))
+
+
+
+
+unMeta :: MAPeg -> APegSt (APeg)
+unMeta MkLambda           = return $ Lambda
+unMeta (MkCal nt inh syn) = do  xs <- mapM evalExp inh 
+                                ys <- mapM evalExp syn
+                                return $ NT nt (map expFromVal xs) (map expFromVal ys)
+unMeta (MkKle e)          = evalExp e >>= return.(Kle).apegFromVal
+unMeta (MkNot e)          = evalExp e >>= return.(Not).apegFromVal
+unMeta (MkSeq xs)         = mapM evalExp xs >>= return.Seq.(map apegFromVal)
+unMeta (MkAlt xs)         = mapM evalExp xs >>= return.Alt.(map apegFromVal)
+unMeta (MkAE xs)          = do ys <- mapM (\(v,e) -> evalExp e >>= (\r -> return (v,expFromVal r))) xs
+                               return $ AEAttr ys
 
 mapInsert :: Value -> String -> Value -> APegSt (Value)
 mapInsert (VMap m) s v = return $ VMap (M.insert s v m)
@@ -109,8 +152,8 @@ evalExp (MkRule nt inh syn b) = do xs <- mapM evalExp syn
 evalExp (Str s) = return (VStr s)
 evalExp (EmptyMap) = return (VMap M.empty)
 evalExp (EVar v)   = var v
-evalExp (MetaPeg m) = return $ VPeg (unMeta m)
-evalExp (MetaExp m) = return $ VExp (unMetaE m)
+evalExp (MetaPeg m) = unMeta m >>=  return.VPeg
+evalExp (MetaExp m) = return $ VExp m
 evalExp (Mp xs)    = (mapM (\(s,b) -> (evalExp b>>= (\r->return (s,r)))) xs) >>= (\xs -> return $ VMap (M.fromList xs))
 evalExp (MapIns m s v)  = do mp <- evalExp m
                              val <- evalExp v
@@ -119,7 +162,14 @@ evalExp (MapAcces m i) = do mp <- evalExp m
                             str <- evalExp i
                             mapAcces mp str
 
+                                
+                                
+-- ======= APEG Interpretation of PEG Expression ======= --
 
-                                
-                                
-                                
+interp :: APeg -> APegSt ()
+interp (Lambda) =  done
+interp (Lit s)  = patternMatch s
+
+
+
+

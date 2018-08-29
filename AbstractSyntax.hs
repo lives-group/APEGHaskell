@@ -22,12 +22,13 @@ data APeg = Lambda
          | Seq [APeg]
          | Alt [APeg]
          | AEAttr [(Var,Expr)] -- The list of attributions of expressions to varaibales
+         | Bind Var APeg
          deriving Show
 
 data Expr = Str String 
           | EmptyMap  
           | MetaPeg MAPeg
-          | MetaExp MExpr 
+          | MetaExp Expr 
           | EVar Var
           | ExtRule Expr Expr Expr -- ExtRule  Grammar RuleName Apeg
           | MkRule NonTerminal [(Type,Var)] [Expr] Expr
@@ -36,23 +37,16 @@ data Expr = Str String
           | MapAcces Expr Expr         -- Map Access method
           deriving Show
           
-
+ -- Combinators for dybamically building PEGS 
 data MAPeg = MkLambda 
-           | MkCal NonTerminal [MExpr] [MExpr]
-           | MkKle MAPeg 
-           | MkNot MAPeg
-           | MkSeq [MAPeg]
-           | MkAlt [MAPeg]
-           | MkAE [(Var,MExpr)] 
+           | MkCal NonTerminal [Expr] [Expr]
+           | MkKle Expr 
+           | MkNot Expr
+           | MkSeq [Expr]
+           | MkAlt [Expr]
+           | MkAE [(Var,Expr)] 
            deriving Show
-          
-data MExpr = MkStr String
-           | MkVar Var
-           | MkEmptyMap
-           | MkMp [(String,MExpr)]
-           | MkMapIns MExpr String MExpr
-           | MkMapAcces MExpr MExpr
-           deriving Show
+
 
 data Type = TyStr
           | TyMetaPeg Type

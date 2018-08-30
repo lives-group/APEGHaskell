@@ -5,6 +5,7 @@ import qualified Data.Map as M
 import Data.Either
 import Control.Monad.State.Lazy
 
+
 type VEnv  = M.Map String Value 
 type TyEnv = M.Map String ([Type],[Type], TyRuleEnv) 
 type TyRuleEnv = M.Map String Type -- All the variables in the scope of a rule
@@ -121,8 +122,8 @@ unMeta (MkCal nt inh syn) = do  xs <- mapM evalExp inh
                                 return $ NT nt (map expFromVal xs) (map expFromVal ys)
 unMeta (MkKle e)          = evalExp e >>= return.(Kle).apegFromVal
 unMeta (MkNot e)          = evalExp e >>= return.(Not).apegFromVal
-unMeta (MkSeq x y)        = evalExp x >>= \px -> evalExp y >>= \py -> return $ Seq x y
-unMeta (MkAlt x y)        = evalExp x >>= \px -> evalExp y >>= \py -> return $ Alt x y
+unMeta (MkSeq x y)        = evalExp x >>= \px -> evalExp y >>= \py -> return $ Seq (apegFromVal px) ((apegFromVal py))
+unMeta (MkAlt x y)        = evalExp x >>= \px -> evalExp y >>= \py -> return $ Alt ((apegFromVal px)) (apegFromVal py)
 unMeta (MkAE xs)          = do ys <- mapM (\(v,e) -> evalExp e >>= (\r -> return (v,expFromVal r))) xs
                                return $ AEAttr ys
 
@@ -151,7 +152,7 @@ evalExp (EmptyMap) = return (VMap M.empty)
 evalExp (EVar v)   = var v
 evalExp (MetaPeg m) = unMeta m >>=  return.VPeg
 evalExp (MetaExp m) = return $ VExp m
-evalExp (MpLit xs)    = (mapM (\(s,b) -> (evalExp b>>= (\r->return (s,r)))) xs) >>= (\xs -> return $ VMap (M.fromList xs))
+evalExp (MpLit xs)  = (mapM (\(s,b) -> (evalExp b>>= (\r->return (s,r)))) xs) >>= (\xs -> return $ VMap (M.fromList xs))
 evalExp (MapIns m s v)  = do mp <- evalExp m
                              val <- evalExp v
                              mapInsert mp s val

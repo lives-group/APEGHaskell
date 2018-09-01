@@ -107,7 +107,7 @@ onSucess suc fai = isOk >>= f
                   
 
 done :: APegSt ()
-done =  get >>= \(grm,env,tyEnv,reckon,inp,res) -> put (grm,env,tyEnv,reckon,inp,True) 
+done =  modify (\(grm,env,tyEnv,reckon,inp,res) -> (grm,env,tyEnv,reckon,inp,True)) 
 
 pfail :: APegSt ()
 pfail = modify (\(grm,env,tyenv,reckon,inp,r) -> (grm,env,tyenv,reckon,inp,False))
@@ -199,20 +199,32 @@ implicitLanArg (xs) = language >>= return.(:xs).VLan
 try :: APegSt () -> APegSt ()
 try p = do s' <- get
            r <- p
-           onSucess (return ()) (put s')
+           onSucess (return ()) (put s' >> pfail)
 
 klenne :: APegSt a -> APegSt [a]
 klenne p =  
      do s <- get 
         x <- p 
-        xs <- onSucess (klenne p) (put s >> return [])
+        xs <- onSucess (klenne p) (put s >> done >> return [])
         return (x:xs)            
 
 sequential :: APegSt () -> APegSt () -> APegSt ()
 sequential p q = do p 
                     r <- isOk
                     if r then q else return () 
-        
+                    
+alternate :: APegSt () -> APegSt () -> APegSt ()
+alternate l r = try l >> onSucess (return ()) (done >> r) 
+                   
+notPeg :: APegSt () -> APegSt ()
+notPeg p = do (_,_,_,reckon,inp,_) <- get 
+              p
+              (grm,env,tyEnv,_,_,res) <- get 
+              onSucess (put (grm,env,tyEnv,reckon,inp,False)) (put (grm,env,tyEnv,reckon,inp,True) >> return ()) 
+              
+bind :: (Var, Expr) -> APegSt ()
+bind (v,e) = evalExp e >>= \val -> envAlter (M.insert v val)
+                   
 supresEnv :: VEnv -> APegSt a -> APegSt a
 supresEnv nwEnv b = do oldEnv <- envSwap nwEnv
                        r <- b
@@ -222,17 +234,13 @@ supresEnv nwEnv b = do oldEnv <- envSwap nwEnv
 envFromDec :: [(Type,Var)] -> [Value] -> VEnv
 envFromDec xs vs = M.fromList $ zipWith (\(_,v) o -> (v,o)) xs vs
 
+                                    
 callNt :: String -> [Value] -> [Var] -> APegSt ()
 callNt nt vs@((VLan g):inh) vars = 
    case fetch g nt of
-     Just (ApegRule nt xs es b) -> do zs <- supresEnv (envFromDec xs vs) 
-                                                      (interp b >> 
-                                                       (mapM evalExp es >>= 
-                                                        \ws -> return $ zip vars ws))
-                                      envAlter (M.union (M.fromList zs)) 
-                                      
-     Nothing                    -> fail "Attempt to call inexisiting rule !"
-
+     Just r  -> interpRule vs vars r 
+     Nothing -> fail "Attempt to call inexisiting rule !"
+callNt _ _ _ = fail "Panic !, Missing Language Attribute !" 
 
 interp :: APeg -> APegSt ()
 interp (Lambda)       =  done
@@ -241,3 +249,21 @@ interp (NT s inh ret) = do inh <- (mapM evalExp inh >>= implicitLanArg)
                            callNt s inh ret 
 interp (Kle p)        = klenne (interp p) >> return ()
 interp (Seq e d)      = sequential (interp e) (interp d)
+interp (Alt e d)      = alternate (interp e) (interp d)
+interp (Not e)        = notPeg (interp e)
+interp (AEAttr xs)    = mapM_ bind xs  
+
+
+interpRule :: [Value] -> [Var] -> ApegRule -> APegSt ()
+interpRule vs os (ApegRule nt inh syn b) = do zs <- supresEnv (envFromDec inh vs) 
+                                                               (interp b >> 
+                                                               (mapM evalExp syn >>= 
+                                                               \ws -> return $ zip os ws))
+                                              envAlter (M.union (M.fromList zs))
+
+interpGrammar :: [Value] -> ApegGrm -> APegSt ()
+interpGrammar vs [] = return ()
+interpGrammar vs (r:_) = (implicitLanArg vs) >>= \vs' -> interpRule vs' (outs r) r  
+    where outs (ApegRule _ _ syn _) = [ "_varOut" ++ (show i) | i <- [1..length syn] ]
+
+

@@ -16,7 +16,7 @@ data ApegRule = ApegRule NonTerminal [(Type,Var)] [Expr] APeg deriving Show
 
 data APeg = Lambda
          | Lit String
-         | NT NonTerminal [Expr] [Expr]
+         | NT NonTerminal [Expr] [Var]
          | Kle APeg
          | Not APeg
          | Seq APeg APeg
@@ -25,11 +25,12 @@ data APeg = Lambda
          | Bind Var APeg
          deriving Show
 
-data Expr = Str String 
-          | EmptyMap  
+data Expr = EmptyMap  
+          | Str String 
+          | EVar Var
           | MetaPeg MAPeg
           | MetaExp Expr 
-          | EVar Var
+          | Union Expr Expr -- Uniao Language Language
           | ExtRule Expr Expr Expr -- ExtRule  Grammar RuleName Apeg
           | MkRule NonTerminal [(Type,Var)] [Expr] Expr
           | MpLit [(String,Expr)] 
@@ -49,19 +50,22 @@ data MAPeg = MkLambda
 
 
 data Type = TyStr
-          | TyMetaPeg Type
+          | TyAPeg
+          | TyMap Type
+          | TyRule [Type] [Type]
+          | TyMetaAPeg Type
           | TyMetaExp Type
           | TyLanguage -- This type is to be attributed to Grammar whose all rules are correct.
-          | TyMap Type
           deriving (Show, Eq)
 
 
 
 -- =================== AST Manipulation Utilities =================== --
                                          
-fetch :: ApegGrm -> String -> ApegRule
+fetch :: ApegGrm -> String -> Maybe ApegRule
+fetch [] _ = Nothing
 fetch (x@(ApegRule nt _ _ _  ):xs) s
-    | nt == s = x
+    | nt == s = Just x
     | otherwise = fetch xs s
     
 mkAltBody :: APeg -> APeg -> APeg

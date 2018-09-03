@@ -37,4 +37,12 @@ inferTypeExpr nt (MapAcces m k) = do tm <- inferTypeExpr nt m
                                      case (tm, tk) of
                                           (TyMap t, TyStr) -> return t
                                           _   -> fail ("Illegal map access: " ++ (show m) " " ++ (show k))
-                                          
+inferTypeExpr nt (ExtRule grm rname mapeg) = do tylam <- inferTypeExpr nt grm 
+                                                tystr <- inferTypeExpr nt rname
+                                                tympeg <- inferTypeExpr mapeg
+                                                
+inferTypeExpr nt (MetaPeg mpeg) = inferTypeMpeg nt mpeg 
+inferTypeExpr nt (MetaExp mexp) = inferTypeMExpr nt mexp
+
+
+    

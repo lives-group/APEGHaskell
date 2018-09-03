@@ -3,9 +3,14 @@ module LangSample where
 import APEGInterp
 import Control.Monad.State.Lazy
 import AbstractSyntax
+import APEGState
 
 
+alts :: [APeg] -> APeg
+alts  = foldr1 Alt
 
+seqs :: [APeg] -> APeg
+seqs = foldr1 Seq 
 
 -- ================= EXAMPLE 1 =================
 -- Testing simple PEG and APEG expressions !
@@ -55,8 +60,8 @@ r4ex1 = Alt (Seq (AEAttr [("y",Str "Yka")] )
 -- S[Lan g] -> 'a' S<g> 'b'
 --           / '.'
 
-runGrmEx1 ::   String -> ((),ApegTuple) 
-runGrmEx1 s = runState (interpGrammar [] ex2) (zeroSt ex2 s)
+runGrmEx1 ::   String -> SmallTuple 
+runGrmEx1 s = simpleTestWithArgs ex2 [] s
 
 ex2 :: ApegGrm
 ex2 = [r1ex2]
@@ -69,6 +74,31 @@ r1ex2 = ApegRule "S"
                             (Seq (NT "S" [] [])
                                  (Lit "b")))
                        (Lit ".") )
+                       
+--  ================= EXAMPLE 3 =================
+-- Using Bind : 
+-- 
+-- S[Lan g] returns [String out] -> out = NUM 
+--                                / ou = VAR
+-- NUM[Lan g] -> (0 \ 1) (0 \ 1)*
+-- VAR[Lan g] -> ('A' \ 'B') ('A' \ 'B')*
+
+runGrmEx3 ::   String -> SmallTuple 
+runGrmEx3 s = simpleTestWithArgs ex3 [] s
+
+ex3 :: ApegGrm
+ex3 = [r1ex3,r2ex3,r3ex3]
+
+r1ex3 :: ApegRule
+r1ex3 = ApegRule "S" [(TyLanguage, "g")] [EVar "out"]  ( Alt (Bind "out" (NT "VAR" [] [])) 
+                                                             (Bind "out" (NT "NUM" [] [])) )
+
+r2ex3 :: ApegRule
+r2ex3 = ApegRule "VAR" [(TyLanguage, "g")] [] (let x = (Alt (Lit "A") (Lit "B")) in Seq x (Kle x))
+
+
+r3ex3 :: ApegRule
+r3ex3 = ApegRule "NUM" [(TyLanguage, "g")] [] (let x = (Alt (Lit "0") (Lit "1")) in Seq x (Kle x))
 
 
 

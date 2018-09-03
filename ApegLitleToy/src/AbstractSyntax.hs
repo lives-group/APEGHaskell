@@ -8,7 +8,7 @@ type NonTerminal = String
 type Var = String
 
 type ApegGrm = [ApegRule]
- 
+
 
  
 -- ApegRule  (Name or String) (Inherited Syntatical Parameters)
@@ -25,8 +25,7 @@ data APeg = Lambda
          | Bind Var APeg
          deriving Show
 
-data Expr = EmptyMap  
-          | Str String 
+data Expr = Str String 
           | EVar Var
           | MetaPeg MAPeg
           | MetaExp Expr 
@@ -34,7 +33,7 @@ data Expr = EmptyMap
           | ExtRule Expr Expr Expr -- ExtRule  Grammar RuleName Apeg
           | MkRule NonTerminal [(Type,Var)] [Expr] Expr
           | MpLit [(String,Expr)] 
-          | MapIns Expr String Expr -- Map insertion method
+          | MapIns Expr Expr Expr -- Map insertion method
           | MapAcces Expr Expr         -- Map Access method
           deriving Show
           
@@ -59,6 +58,13 @@ data Type = TyStr
           deriving (Show, Eq)
 
 
+data Value = VStr String
+           | VMap (M.Map String Value)
+           | VLan ApegGrm
+           | VPeg APeg
+           | VExp Expr
+           | Undefined
+           deriving Show
 
 -- =================== AST Manipulation Utilities =================== --
                                          

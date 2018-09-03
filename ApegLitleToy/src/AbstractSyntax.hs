@@ -2,6 +2,7 @@
 module AbstractSyntax where
 
 import Control.Monad
+import Data.Char 
 import Data.List
 import qualified Data.Map as M
 import Test.QuickCheck
@@ -97,7 +98,7 @@ genType d n m
 type Gamma = M.Map String Type -- typing context
 
 genStrLit :: Gen String
-genStrLit = vectorOf 4 (suchThat isAlphaNum)
+genStrLit = vectorOf 4 (suchThat (arbitrary :: Gen Char) isAlphaNum)
 
 genExpr :: Depth -> Gamma -> Type -> Gen Expr
 genExpr d gam ty
@@ -106,22 +107,7 @@ genExpr d gam ty
          [
            (10, Str <$> genStrLit)
          ]
-
-
-
-data Expr = Str String                                  -- string literal
-          | EVar Var                                    -- variable 
-          | MetaPeg MAPeg                               -- meta level PEG
-          | MetaExp Expr                                -- meta level Expr
-          | Union Expr Expr                             -- Uniao Language Language
-          | ExtRule Expr Expr Expr                      -- ExtRule  Grammar RuleName Apeg
-          | MkRule NonTerminal [(Type,Var)] [Expr] Expr -- new non terminal creation
-          | MpLit [(String,Expr)]                       -- map literal
-          | MapIns Expr Expr Expr                       -- Map insertion method: m[s / v] means MapIns m s v 
-          | MapAccess Expr Expr                         -- Map Access method: m[s] = MapAccess m s
-          deriving Show
-
-
+    | otherwise = undefined
 
 -- =================== AST Manipulation Utilities =================== --
                                          

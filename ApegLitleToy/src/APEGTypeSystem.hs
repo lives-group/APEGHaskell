@@ -37,20 +37,18 @@ inferTypeExpr nt (MapIns e k ex) = do tm <- inferTypeExpr nt e
                                       case checkMapIns tm tk tv of
                                            Just t -> return t
                                            Nothing -> fail ("Illegal map insertion: map " ++ (show tm) ++ "and valule " ++ (show tv))
-                                           
-inferTypeExpr nt (MapAcces m k) = do tm <- inferTypeExpr nt m
-                                     tk <- inferTypeExpr nt k
-                                     case (tm, tk) of
-                                          (TyMap t, TyStr) -> return t
-                                          _   -> fail ("Illegal map access: " ++ (show m) " " ++ (show k))
-                                          
-inferTypeExpr nt r@(ExtRule grm rname mapeg)
-    = do tylam <- inferTypeExpr nt grm 
-         tystr <- inferTypeExpr nt rname
-         tympeg <- inferTypeExpr nt mapeg
-         case validateRuleExt tylam tystr tympeg of
-             Just t -> return t
-             Nothing -> fail ("Illegal rule extension at : " ++ show r)
+inferTypeExpr nt (MapAccess m k) = do tm <- inferTypeExpr nt m
+                                      tk <- inferTypeExpr nt k
+                                      case (tm, tk) of
+                                        (TyMap t, TyStr) -> return t
+                                        _   -> fail ("Illegal map access: " ++ (show m) ++ " " ++ (show k))
+inferTypeExpr nt (ExtRule grm rname mapeg) = do tylam <- inferTypeExpr nt grm 
+                                                tystr <- inferTypeExpr nt rname
+                                               --  tympeg <- inferTypeExpr mapeg
+                                                undefined
+                                                
+inferTypeExpr nt (MetaPeg mpeg) = undefined -- inferTypeMpeg nt mpeg 
+inferTypeExpr nt (MetaExp mexp) = undefined -- inferTypeMExpr nt mexp
 
 inferTypeExpr nt r@(MkRule grm inh syn mapeg)
     = do tylam <- inferTypeExpr nt grm

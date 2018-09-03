@@ -31,12 +31,12 @@ data Expr = Str String
           | MetaExp Expr 
           | Union Expr Expr -- Uniao Language Language
           | ExtRule Expr Expr Expr -- ExtRule  Grammar RuleName Apeg
-          | MkRule NonTerminal [(Type,Var)] [Expr] Expr
+          | MkRule Expr [(Type,Var)] [Expr] Expr
           | MpLit [(String,Expr)] 
           | MapIns Expr Expr Expr -- Map insertion method
           | MapAcces Expr Expr         -- Map Access method
           deriving Show
-          
+
  -- Combinators for dynamically building PEGS 
 data MAPeg = MkLambda 
            | MkCal NonTerminal [Expr] [Expr]
@@ -47,12 +47,16 @@ data MAPeg = MkLambda
            | MkAE [(Var,Expr)] 
            deriving Show
 
-
+-- data TyExpr = MkTyStr
+--             | MkTyMap Expr
+--             | MkTyRule [Expr] [Expr]
+--             | 
+    
 data Type = TyStr
           | TyAPeg
           | TyMap Type
           | TyRule [Type] [Type]
-          | TyMetaAPeg Type
+          | TyMetaAPeg
           | TyMetaExp Type
           | TyLanguage -- This type is to be attributed to Grammar whose all rules are correct.
           deriving (Show, Eq)

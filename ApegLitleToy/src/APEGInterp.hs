@@ -1,5 +1,5 @@
 module APEGInterp where
-
+       
 import AbstractSyntax
 import APEGState
 import qualified Data.Map as M
@@ -76,9 +76,10 @@ evalExp (ExtRule lam ntexp mapeg) =  do grm <- evalExp lam
                                         apeg <- evalExp mapeg -- Dyn typing to be done here !
                                         dynRule grm nt apeg 
                                         
-evalExp (MkRule nt inh syn b) = do xs <- mapM evalExp syn
+evalExp (MkRule nt inh syn b) = do ntName <- evalExp nt
+                                   xs <- mapM evalExp syn
                                    apeg <- evalExp b
-                                   ruleCreate nt inh xs apeg 
+                                   ruleCreate (strVal ntName) inh xs apeg 
 evalExp (Union e1 e2) = do l1 <- evalExp e1
                            l2 <- evalExp e2
                            lanUnion l1 l2                         

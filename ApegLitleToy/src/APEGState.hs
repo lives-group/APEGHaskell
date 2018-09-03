@@ -39,11 +39,14 @@ valIsMPeg :: Value -> Bool
 valIsMPeg (VPeg _) = True
 valIsMPeg _        = False
 
+strVal :: Value -> String
+strVal (VStr s) = s
+
 expFromVal :: Value -> Expr
 expFromVal (VExp e) = e
 
 varNameFromVal :: Value -> Var
-varNameFromVal (VExp (Str  s)) = s
+varNameFromVal (VExp (Str s)) = s
 
 
 apegFromVal :: Value -> APeg
@@ -79,7 +82,7 @@ tyEnvAlter f = modify (\(grm,env,tyEnv,reckon,inp,res) -> (grm,env,f tyEnv,recko
 tyRuleAlter :: (TyRuleEnv -> TyRuleEnv) -> NonTerminal -> APegSt ()
 tyRuleAlter f nt = modify (\(grm,env,tyEnv,reckon,inp,res) -> (grm,env,adapter tyEnv,reckon,inp,res))
     where adapter = M.adjust (\(t,renv) -> (t,f renv)) nt
-          
+
 ntType :: NonTerminal -> APegSt (Maybe Type)
 ntType nt = do (_,_,tyEnv,_,_,_) <- get
                case  (tyEnv M.!? nt) of

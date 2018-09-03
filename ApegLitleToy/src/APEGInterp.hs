@@ -89,9 +89,9 @@ evalExp (MapIns m s v)  = do mp  <- evalExp m
                              key <- evalExp s
                              val <- evalExp v
                              mapInsert mp (varNameFromVal key) val
-evalExp (MapAcces m i) = do mp  <- evalExp m
-                            str <- evalExp i
-                            mapAcces mp str
+evalExp (MapAccess m i) = do mp  <- evalExp m
+                             str <- evalExp i
+                             mapAcces mp str
 
 interp :: APeg -> APegSt ()
 interp (Lambda)       =  done

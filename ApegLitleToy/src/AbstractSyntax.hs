@@ -101,13 +101,18 @@ genStrLit :: Gen String
 genStrLit = vectorOf 4 (suchThat (arbitrary :: Gen Char) isAlphaNum)
 
 genExpr :: Depth -> Gamma -> Type -> Gen Expr
-genExpr d gam ty
-    | d > 1
-       = frequency
-         [
-           (10, Str <$> genStrLit)
-         ]
-    | otherwise = undefined
+genExpr _ _ TyStr
+  = Str <$> vectorOf 4 (suchThat (arbitrary :: Gen Char) isAlphaNum)
+genExpr _ _ TyAPeg
+  = undefined
+
+
+-- generating apegs
+
+genAPEG :: Depth -> Gen APeg
+genAPEG d
+  | d > 1     = undefined
+  | otherwise = undefined
 
 -- =================== AST Manipulation Utilities =================== --
                                          

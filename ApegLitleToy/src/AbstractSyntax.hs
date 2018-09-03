@@ -1,8 +1,11 @@
  
 module AbstractSyntax where
 
+import Control.Monad
 import Data.List
 import qualified Data.Map as M
+import Test.QuickCheck
+
 
 type NonTerminal = String
 type Var = String
@@ -14,27 +17,27 @@ type ApegGrm = [ApegRule]
 -- ApegRule  (Name or String) (Inherited Syntatical Parameters)
 data ApegRule = ApegRule NonTerminal [(Type,Var)] [Expr] APeg deriving Show
 
-data APeg = Lambda
+data APeg = Lambda                            
          | Lit String
          | NT NonTerminal [Expr] [Var]
          | Kle APeg
          | Not APeg
          | Seq APeg APeg
          | Alt APeg APeg
-         | AEAttr [(Var,Expr)] -- The list of attributions of expressions to varaibales
+         | AEAttr [(Var,Expr)]                          -- The list of attributions of expressions to varaibales
          | Bind Var APeg
          deriving Show
 
-data Expr = Str String 
-          | EVar Var
-          | MetaPeg MAPeg
-          | MetaExp Expr 
-          | Union Expr Expr -- Uniao Language Language
-          | ExtRule Expr Expr Expr -- ExtRule  Grammar RuleName Apeg
-          | MkRule NonTerminal [(Type,Var)] [Expr] Expr
-          | MpLit [(String,Expr)] 
-          | MapIns Expr Expr Expr -- Map insertion method
-          | MapAcces Expr Expr         -- Map Access method
+data Expr = Str String                                  -- string literal
+          | EVar Var                                    -- variable 
+          | MetaPeg MAPeg                               -- meta level PEG
+          | MetaExp Expr                                -- meta level Expr
+          | Union Expr Expr                             -- Uniao Language Language
+          | ExtRule Expr Expr Expr                      -- ExtRule  Grammar RuleName Apeg
+          | MkRule NonTerminal [(Type,Var)] [Expr] Expr -- new non terminal creation
+          | MpLit [(String,Expr)]                       -- map literal
+          | MapIns Expr Expr Expr                       -- Map insertion method: m[s / v] means MapIns m s v 
+          | MapAccess Expr Expr                         -- Map Access method: m[s] = MapAccess m s
           deriving Show
           
  -- Combinators for dynamically building PEGS 
@@ -65,6 +68,60 @@ data Value = VStr String
            | VExp Expr
            | Undefined
            deriving Show
+
+-- generators
+
+type InhSize = Int  -- number of generated inherited attributes  
+type SynSize = Int  -- number of generated synthesized attributes.
+type Depth   = Int
+
+-- generator of types. 
+
+genType :: Depth -> InhSize -> SynSize -> Gen Type
+genType d n m
+  | d > 1 
+    = frequency
+      [
+        (10, return TyStr)
+      , (10, return TyAPeg)
+      , (10, TyMap <$> genType (d - 1) n m) 
+      , (50, TyRule <$> (replicateM n (genType (d - 1) n m)) <*>
+                        (replicateM m (genType (d - 1) n m)))
+      ]
+   | otherwise
+     = oneof [ return TyStr
+             , return TyAPeg ]
+
+-- generating statically typed exprs
+
+type Gamma = M.Map String Type -- typing context
+
+genStrLit :: Gen String
+genStrLit = vectorOf 4 (suchThat isAlphaNum)
+
+genExpr :: Depth -> Gamma -> Type -> Gen Expr
+genExpr d gam ty
+    | d > 1
+       = frequency
+         [
+           (10, Str <$> genStrLit)
+         ]
+
+
+
+data Expr = Str String                                  -- string literal
+          | EVar Var                                    -- variable 
+          | MetaPeg MAPeg                               -- meta level PEG
+          | MetaExp Expr                                -- meta level Expr
+          | Union Expr Expr                             -- Uniao Language Language
+          | ExtRule Expr Expr Expr                      -- ExtRule  Grammar RuleName Apeg
+          | MkRule NonTerminal [(Type,Var)] [Expr] Expr -- new non terminal creation
+          | MpLit [(String,Expr)]                       -- map literal
+          | MapIns Expr Expr Expr                       -- Map insertion method: m[s / v] means MapIns m s v 
+          | MapAccess Expr Expr                         -- Map Access method: m[s] = MapAccess m s
+          deriving Show
+
+
 
 -- =================== AST Manipulation Utilities =================== --
                                          

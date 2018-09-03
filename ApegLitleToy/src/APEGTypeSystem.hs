@@ -6,6 +6,8 @@ import AbstractSyntax
 import Data.Maybe
 
 
+
+
 checkMapIns :: Type -> Type -> Type -> Maybe Type
 checkMapIns t@(TyMap m) key val
     | (m == val) && key == TyStr = Just t
@@ -14,6 +16,12 @@ checkMapIns t@(TyMap m) key val
 validateRuleExt :: Type -> Type -> Type -> Maybe Type
 validateRuleExt TyLanguage TyStr TyMetaAPeg = Just TyLanguage
 validateRuleExt _ _ _  = Nothing
+
+validateRuleCreate :: Type -> [(Type,Var)] -> [Type] -> Type -> Maybe Type
+validateRuleCreate TyStr xs rs TyMetaAPeg 
+   | (all isMetaType (map fst xs)) && (all isMetaType rs) = Just (TyRule (map fst xs) rs)
+   | otherwise = Nothing
+
 
 inferTypeExpr :: NonTerminal -> Expr -> APegSt (Type)
 inferTypeExpr nt (Str _)  = return TyStr
@@ -42,23 +50,32 @@ inferTypeExpr nt (MapAccess m k) = do tm <- inferTypeExpr nt m
                                       case (tm, tk) of
                                         (TyMap t, TyStr) -> return t
                                         _   -> fail ("Illegal map access: " ++ (show m) ++ " " ++ (show k))
-inferTypeExpr nt (ExtRule grm rname mapeg) = do tylam <- inferTypeExpr nt grm 
-                                                tystr <- inferTypeExpr nt rname
-                                               --  tympeg <- inferTypeExpr mapeg
-                                                undefined
-                                                
-inferTypeExpr nt (MetaPeg mpeg) = undefined -- inferTypeMpeg nt mpeg 
-inferTypeExpr nt (MetaExp mexp) = undefined -- inferTypeMExpr nt mexp
-
+inferTypeExpr nt r@(ExtRule grm rname mapeg) = do tylam  <- inferTypeExpr nt grm 
+                                                  tystr  <- inferTypeExpr nt rname
+                                                  tympeg <- inferTypeExpr nt mapeg
+                                                  maybe (fail ("Ilegal rule extension at " ++ show r))
+                                                        (return)
+                                                        (validateRuleExt tylam tystr tympeg)                                                    
 inferTypeExpr nt r@(MkRule grm inh syn mapeg)
     = do tylam <- inferTypeExpr nt grm
-         
-         results <- mapM (inferTypeExpr nt syn
+         -- Meta-Dyn Checking must be done with rule context !
+         results <- mapM (inferTypeExpr nt) syn
          tympeg <- inferTypeExpr nt mapeg
-         case validateRuleExt tylam tystr tympeg of
+         case validateRuleCreate tylam inh results tympeg of
             Just t -> return t
             Nothing -> fail ("Illegal rule extension at : " ++ show r)
 
-inferTypeExpr nt (MetaPeg mpeg) = inferTypeMpeg nt mpeg
-inferTypeExpr nt (MetaExp mexp) = inferTypeMExpr nt mexp
+inferTypeExpr nt (MetaPeg mpeg) = undefined -- inferTypeMpeg nt mpeg 
+inferTypeExpr nt (MetaExp mexp) = undefined -- inferTypeMExpr nt mexp
 
+
+validateNt :: TyRuleEnv -> Type -> Type -> Maybe Type
+validateNt nt inh rets =  
+
+inferPegType :: NonTerminal -> APeg -> APegSt Type
+inferPegType nt Lambda   = return TyAPeg
+inferPegType nt (Lit _)  = return TyAPeg
+inferPegType nt (NT nt' inh syn) = maybe (fail "Undefined non-terminal: " ++ nt)
+                                         (\t -> do inhTys <- mapM inferTypeExpr nt'
+                                                   synTys <- mapM inferTypeExpr nt' 
+                                          )

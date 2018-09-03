@@ -135,7 +135,10 @@ grmExtRule (x@(ApegRule nt inh syn body):xs) nt' newAlt
     | nt == nt' = (ApegRule nt inh syn (mkAltBody body newAlt)):xs
     | otherwise = x: grmExtRule xs nt' newAlt
     
-    
+isMetaType :: Type -> Bool
+isMetaType TyMetaAPeg = True
+isMetaType (TyMetaExp _) = True
+isMetaType _   = False
 -- =================== Show Utilities =================== --
 
 prec :: APeg -> Int

@@ -127,3 +127,7 @@ supresEnv nwEnv b = do oldEnv <- envSwap nwEnv
 
 envFromDec :: [(Type,Var)] -> [Value] -> VEnv
 envFromDec xs vs = M.fromList $ zipWith (\(_,v) o -> (v,o)) xs vs
+
+tyEnvFromDec :: [(Type,Var)] -> TyRuleEnv
+tyEnvFromDec = (M.fromList).(map (\(a,b)->(b,a)))
+

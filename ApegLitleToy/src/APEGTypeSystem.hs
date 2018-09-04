@@ -6,7 +6,13 @@ import AbstractSyntax
 import Data.Maybe
 
 
+binPegTyInfer :: String -> String -> Type -> Type -> APegSt (Type)
+binPegTyInfer _ _ TyAPeg TyAPeg = return TyAPeg
+binPegTyInfer op term _ _ = fail ("Illegal " ++ op ++ " construction at " ++ term) 
 
+unPegTyInfer :: String -> String -> Type -> APegSt (Type)
+unPegTyInfer _ _ TyAPeg = return TyAPeg
+unPegTyInfer op term _  = fail ("Illegal " ++ op ++ " construction at " ++ term)
 
 checkMapIns :: Type -> Type -> Type -> Maybe Type
 checkMapIns t@(TyMap m) key val
@@ -21,7 +27,6 @@ validateRuleCreate :: Type -> [(Type,Var)] -> [Type] -> Type -> Maybe Type
 validateRuleCreate TyStr xs rs TyMetaAPeg 
    | (all isMetaType (map fst xs)) && (all isMetaType rs) = Just (TyRule (map fst xs) rs)
    | otherwise = Nothing
-
 
 inferTypeExpr :: NonTerminal -> Expr -> APegSt (Type)
 inferTypeExpr nt (Str _)  = return TyStr
@@ -68,14 +73,25 @@ inferTypeExpr nt r@(MkRule grm inh syn mapeg)
 inferTypeExpr nt (MetaPeg mpeg) = undefined -- inferTypeMpeg nt mpeg 
 inferTypeExpr nt (MetaExp mexp) = undefined -- inferTypeMExpr nt mexp
 
-
-validateNt :: TyRuleEnv -> Type -> Type -> Maybe Type
-validateNt nt inh rets =  
-
 inferPegType :: NonTerminal -> APeg -> APegSt Type
 inferPegType nt Lambda   = return TyAPeg
 inferPegType nt (Lit _)  = return TyAPeg
-inferPegType nt (NT nt' inh syn) = maybe (fail "Undefined non-terminal: " ++ nt)
-                                         (\t -> do inhTys <- mapM inferTypeExpr nt'
-                                                   synTys <- mapM inferTypeExpr nt' 
-                                          )
+inferPegType nt r@(NT nt' inh syn)
+   = do mnt <- ntType nt'
+        maybe (fail ("Undefined non-terminal: " ++ nt))
+              (\(TyRule inh' syn') -> do inhTys <- mapM (inferTypeExpr nt) inh
+                                         synTys <- mapM (\var ->varTypeOn nt var >>= return.fromJust) syn
+                                         case ((matchAll inhTys inh') && (matchAll syn' synTys)) of
+                                            True  -> return TyAPeg
+                                            False -> fail ("Illegal rule call " ++ (show r))) mnt
+inferPegType nt p@(Kle e) = inferPegType nt e >>= unPegTyInfer "Kle" (show p)
+inferPegType nt p@(Not e) = inferPegType nt e >>= unPegTyInfer "Not" (show p)
+inferPegType nt p@(Seq e d) = do tye <- inferPegType nt e 
+                                 tyd <- inferPegType nt d
+                                 binPegTyInfer "Seq" (show p) tye tyd 
+inferPegType nt p@(Alt e d) = do tye <- inferPegType nt e 
+                                 tyd <- inferPegType nt d
+                                 binPegTyInfer "Alt" (show p) tye tyd
+inferPegType nt p@(AEAttr xs) = undefined
+inferPegType nt p@(Bind v peg) = undefined
+

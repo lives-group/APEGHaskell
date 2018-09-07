@@ -16,7 +16,7 @@ type ApegGrm = [ApegRule]
 
  
 -- ApegRule  (Name or String) (Inherited Syntatical Parameters)
-data ApegRule = ApegRule NonTerminal [(Type,Var)] [Expr] APeg deriving Show
+data ApegRule = ApegRule NonTerminal [(Type,Var)] [(Type,Expr)] APeg deriving Show
 
 data APeg = Lambda                            
          | Lit String
@@ -30,12 +30,13 @@ data APeg = Lambda
          deriving Show
 
 data Expr = Str String                                  -- string literal
+          | Epsilon                                     -- The empty language
           | EVar Var                                    -- variable 
           | MetaPeg MAPeg                               -- meta level PEG
           | MetaExp Expr                                -- meta level Expr
           | Union Expr Expr                             -- Uniao Language Language
           | ExtRule Expr Expr Expr                      -- ExtRule  Grammar RuleName Apeg
-          | MkRule Expr [(Type,Var)] [Expr] Expr -- new non terminal creation
+          | MkRule Expr [(Type,Var)] [(Type, Expr)] Expr -- new non terminal creation
           | MpLit [(String,Expr)]                       -- map literal
           | MapIns Expr Expr Expr                       -- Map insertion method: m[s / v] means MapIns m s v 
           | MapAccess Expr Expr                         -- Map Access method: m[s] = MapAccess m s
@@ -61,7 +62,7 @@ data Type = TyStr
           | TyMap Type
           | TyRule [Type] [Type]
           | TyMetaAPeg
-          | TyMetaExp Type
+          | TyMetaExp
           | TyLanguage -- This type is to be attributed to Grammar whose all rules are correct.
           deriving (Show, Eq)
 
@@ -137,7 +138,7 @@ grmExtRule (x@(ApegRule nt inh syn body):xs) nt' newAlt
     
 isMetaType :: Type -> Bool
 isMetaType TyMetaAPeg = True
-isMetaType (TyMetaExp _) = True
+isMetaType (TyMetaExp) = True
 isMetaType _   = False
 -- =================== Show Utilities =================== --
 

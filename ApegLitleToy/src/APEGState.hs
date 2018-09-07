@@ -29,7 +29,9 @@ type APegSt = State (ApegTuple)
 
 
 zeroSt :: ApegGrm -> String -> ApegTuple
-zeroSt grm s = (grm,M.empty ,M.empty, [],s,True)
+zeroSt grm s = (grm,M.empty ,M.fromList zs, [],s,True)
+    where zs = map ruleEntry grm
+     
 
 valIsMExpr :: Value -> Bool
 valIsMExpr (VExp _) = True
@@ -56,6 +58,11 @@ apegFromVal (VPeg e) = e
 matchAll :: [Type] -> [Type] -> Bool
 matchAll xs ys = (and $ zipWith (==) xs ys) && ((length xs) == (length ys))
 
+ruleEntry :: ApegRule -> (NonTerminal,(Type, TyRuleEnv))
+ruleEntry (ApegRule nt inh syn _ ) = (nt,(TyRule (map fst inh) (map fst syn),M.fromList (map (\(a,b) -> (b,a)) inh)))
+
+tyEnvFromRule :: ApegRule -> TyEnv
+tyEnvFromRule r = M.fromList [ruleEntry r]
 
 -- Projections anv Value Manipulation
 
@@ -64,7 +71,8 @@ language = get >>= \(grm,env,tyEnv,reckon,inp,res) -> return grm
 
 var :: String -> APegSt Value
 var s = get >>= (\(grm,env,tyEnv,reckon,inp,res) -> case env M.!? s of 
-                                                      Nothing -> fail ("Undefined varibale " ++ s)
+                                                      Nothing -> fail ("Undefined varibale " ++ s ++
+                                                                       " reminder input = " ++ inp)
                                                       Just v   -> return v)
 
 varSet :: String -> Value -> APegSt ()
@@ -73,8 +81,12 @@ varSet s v =  envAlter (M.insert s v)
 varsSet :: [(String,Value)] -> APegSt ()
 varsSet zs = envAlter (M.union (M.fromList zs))
 
+
 envAlter :: (VEnv -> VEnv) -> APegSt ()
 envAlter t = get >>= (\(grm,env,tyEnv,reckon,inp,res) -> put (grm,t env,tyEnv,reckon,inp,res)) 
+
+tyEnv :: APegSt (TyEnv)
+tyEnv =  get >>= (\(grm,env,tyEnv,reckon,inp,res) -> return tyEnv)
 
 tyEnvAlter :: (TyEnv -> TyEnv) -> APegSt ()
 tyEnvAlter f = modify (\(grm,env,tyEnv,reckon,inp,res) -> (grm,env,f tyEnv,reckon,inp,res))
@@ -88,9 +100,16 @@ ntType nt = do (_,_,tyEnv,_,_,_) <- get
                case  (tyEnv M.!? nt) of
                     Just (t,_) -> return $ Just t
                     Nothing    -> return $ Nothing
-                    
-recordNtType :: NonTerminal -> Type -> [(String,Type)] -> APegSt ()
-recordNtType nt t xs = tyEnvAlter (M.insert nt (t,M.fromList xs))
+
+ruleEnv :: NonTerminal -> APegSt (Maybe (Type,TyRuleEnv))
+ruleEnv nt = do (_,_,tyEnv,_,_,_) <- get
+                case  (tyEnv M.!? nt) of
+                   Just t -> return $ Just t
+                   Nothing    -> return $ Nothing
+
+recordNtType :: NonTerminal -> [(String,Type)] -> [Type] -> APegSt ()
+recordNtType nt xs ys = tyEnvAlter (M.insert nt (TyRule (map snd xs) ys, M.fromList xs))
+
 
 varTypeOn :: NonTerminal -> Var -> APegSt (Maybe Type)
 varTypeOn nt v = do (_,_,tyEnv,_,_,_) <- get
@@ -108,6 +127,12 @@ envSwap :: VEnv ->  APegSt (VEnv)
 envSwap newEnv = do (g,env,tyEnv,reckon,inp,res) <- get
                     put(g,newEnv,tyEnv,reckon,inp,res) 
                     return env
+                    
+tyEnvSwap :: TyEnv ->  APegSt (TyEnv) 
+tyEnvSwap newEnv = do (g,env,tyEnv,reckon,inp,res) <- get
+                      put(g,env,newEnv,reckon,inp,res) 
+                      return tyEnv
+                                        
                     
 getStr :: APegSt (String) 
 getStr = do (g,env,tyEnv,reckon,inp,res) <- get
@@ -131,3 +156,9 @@ envFromDec xs vs = M.fromList $ zipWith (\(_,v) o -> (v,o)) xs vs
 tyEnvFromDec :: [(Type,Var)] -> TyRuleEnv
 tyEnvFromDec = (M.fromList).(map (\(a,b)->(b,a)))
 
+
+supresTyEnv :: TyEnv -> APegSt a -> APegSt a
+supresTyEnv nwEnv b = do oldEnv <- tyEnvSwap nwEnv
+                         r <- b
+                         tyEnvSwap oldEnv
+                         return r

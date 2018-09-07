@@ -4,13 +4,9 @@ import APEGInterp
 import Control.Monad.State.Lazy
 import AbstractSyntax
 import APEGState
+import APEGTypeSystem
 
 
-alts :: [APeg] -> APeg
-alts  = foldr1 Alt
-
-seqs :: [APeg] -> APeg
-seqs = foldr1 Seq 
 
 -- ================= EXAMPLE 1 =================
 -- Testing simple PEG and APEG expressions !
@@ -90,8 +86,8 @@ ex3 :: ApegGrm
 ex3 = [r1ex3,r2ex3,r3ex3]
 
 r1ex3 :: ApegRule
-r1ex3 = ApegRule "S" [(TyLanguage, "g")] [EVar "out"]  ( Alt (Bind "out" (NT "VAR" [] [])) 
-                                                             (Bind "out" (NT "NUM" [] [])) )
+r1ex3 = ApegRule "S" [(TyLanguage, "g")] [(TyStr,EVar "out")]  ( Alt (Bind "out" (NT "VAR" [EVar "g"] [])) 
+                                                               (Bind "out" (NT "NUM" [EVar "g"] [])) )
 
 r2ex3 :: ApegRule
 r2ex3 = ApegRule "VAR" [(TyLanguage, "g")] [] (let x = (Alt (Lit "A") (Lit "B")) in Seq x (Kle x))

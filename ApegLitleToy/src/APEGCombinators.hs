@@ -52,7 +52,7 @@ klenne p =
 sequential :: APegSt () -> APegSt () -> APegSt ()
 sequential p q = do p 
                     r <- isOk
-                    if r then q else return () 
+                    if r then q else pfail
                     
 alternate :: APegSt () -> APegSt () -> APegSt ()
 alternate l r = try l >> onSucess (return ()) (done >> r) 

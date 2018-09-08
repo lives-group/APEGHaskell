@@ -85,7 +85,9 @@ evalExp (Union e1 e2) = do l1 <- evalExp e1
                            lanUnion l1 l2                         
 evalExp (MetaPeg m) = unMeta m >>=  return.VPeg
 evalExp (MetaExp m) = return $ VExp m
-evalExp (MpLit xs)  = (mapM (\(s,b) -> (evalExp b>>= (\r->return (s,r)))) xs) >>= (\xs -> return $ VMap (M.fromList xs))
+evalExp (MpLit xs)  = (mapM (\(s,b) -> do vs <- evalExp s 
+                                          vr <- evalExp b 
+                                          return (strVal vs,vr)) xs) >>= (\xs -> return $ VMap (M.fromList xs))
 evalExp (MapIns m s v)  = do mp  <- evalExp m
                              key <- evalExp s
                              val <- evalExp v
@@ -108,19 +110,21 @@ interp (Bind v p)     = bindPeg v p
 
 
 interpRule :: [Value] -> [Var] -> ApegRule -> APegSt ()
-interpRule vs os (ApegRule nt inh syn b) = do zs <- supresEnv (envFromDec inh vs) 
-                                                              (interp b >> 
-                                                               (mapM (evalExp.snd) syn >>= 
-                                                                \ws -> return $ zip os ws))
-                                              varsSet zs
+interpRule vs os (ApegRule nt inh syn b) 
+     = do zs <- supresEnv (envFromDec inh vs) 
+                          (interp b >> 
+                           onSucess (mapM (evalExp.snd) syn >>= \ws -> return $ zip os ws)
+                                    (return []))
+          varsSet zs
                                              
 interpGrammar :: [(Var,Value)] -> ApegGrm -> APegSt ()
 interpGrammar vs [] = return ()
-interpGrammar vs grm@((ApegRule _ _ syn b):_) 
+interpGrammar vs grm@((ApegRule nt _ syn b):_) 
        = do envAlter (\_ -> M.fromList (f vs))
             interp b
-            ws <- mapM (evalExp.snd) syn
-            varsSet (outs ws)
+            onSucess (mapM (evalExp.snd) syn >>= \ws -> varsSet (outs ws))
+                     (get >>= \(grm,env,tyenv,reckon,inp,r) -> 
+                               fail ("Rule " ++ nt ++ " has failed. Reminder input \"" ++ (take 30 inp) ++ "\"." ))
                                                                             
     where outs l = zip [ "_varOut" ++ (show i) | i <- [1..length syn] ] l
           f [] = [("g",VLan grm)]

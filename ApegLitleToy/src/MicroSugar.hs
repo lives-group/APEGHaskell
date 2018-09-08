@@ -33,6 +33,9 @@ lower = chrs ['a'..'z']
 identifier :: APeg
 identifier = Seq lower (Kle (Alt lower digit ))
 
+rid :: APeg
+rid = Seq (Alt lower upper) (Kle $ (alts [lower,upper,digit]))
+
 reswrd :: String -> APeg
 reswrd s = Lit s
 
@@ -85,15 +88,46 @@ ruleNewSyn = ApegRule "newSyn"
                                          AEAttr [("lan", Union (EVar "lan") (EVar "r"))]],
                              whts,
                              Lit "}",
-                             AEAttr [("s",MpLit [("n",EVar "lan")])]
+                             AEAttr [("s",MpLit [(EVar "n",EVar "lan")])] 
                             ])
                                 
 ruleRule :: ApegRule
 ruleRule = ApegRule "rule"
                     [(TyLanguage,"g")] -- Tem um problema aqui ! A syntaxe não tem meios para falar de tipos !
-                    [(TyLanguage,MkRule (Str "ru") [(TyLanguage,"g")] [] (MetaPeg MkLambda))]
-                    (Lit ";")
+                    [(TyLanguage,MkRule (EVar "nt") [(TyLanguage,"g")] [] (EVar "p"))]
+                    (seqs [ whts,
+                            Bind "nt" rid,
+                            whts,
+                            Lit "->",
+                            NT "pattern" [g] ["p"]
+                           ] )
 
+rulePattern :: ApegRule 
+rulePattern = ApegRule "pattern"
+                        [(TyLanguage,"g")]
+                        [(TyMetaAPeg,EVar "pe")]
+                        (seqs [ NT "pseq" [g] ["pe"],
+                                whts,
+                                Kle (seqs [Lit "/", 
+                                           whts, 
+                                           NT "pseq" [g] ["pd"],
+                                           AEAttr [("pe",MetaPeg $ MkAlt (EVar "pe") (EVar "pd"))]])
+                                
+                              ])
+                              
+ruleSeq :: ApegRule 
+ruleSeq = ApegRule "pseq"
+                        [(TyLanguage,"g")]
+                        [(TyMetaAPeg,EVar "pe")]
+                        (seqs [ many1 $ seqs [Lit "!", whts, NT "pTerm" [g] ["pn"]],
+                                whts,
+                                Kle (seqs [Lit "/", 
+                                           whts, 
+                                           NT "pseq" [g] ["pd"],
+                                           AEAttr [("pe",MetaPeg $ MkAlt (EVar "pe") (EVar "pd"))]])
+                                
+                              ])
+                              
 ruleExtStmt :: ApegRule
 ruleExtStmt = ApegRule "rStmt"
                        [(TyLanguage,"g")]

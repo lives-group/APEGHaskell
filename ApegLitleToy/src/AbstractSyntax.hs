@@ -37,7 +37,7 @@ data Expr = Str String                                  -- string literal
           | Union Expr Expr                             -- Uniao Language Language
           | ExtRule Expr Expr Expr                      -- ExtRule  Grammar RuleName Apeg
           | MkRule Expr [(Type,Var)] [(Type, Expr)] Expr -- new non terminal creation
-          | MpLit [(String,Expr)]                       -- map literal
+          | MpLit [(Expr,Expr)]                          -- map literal
           | MapIns Expr Expr Expr                       -- Map insertion method: m[s / v] means MapIns m s v 
           | MapAccess Expr Expr                         -- Map Access method: m[s] = MapAccess m s
           deriving Show

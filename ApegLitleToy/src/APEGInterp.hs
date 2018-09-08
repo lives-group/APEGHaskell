@@ -45,6 +45,7 @@ lanUnion _ _ = fail "Attempt to unite two values that aren't languages"
 
 unMeta :: MAPeg -> APegSt (APeg)
 unMeta MkLambda           = return $ Lambda
+unMeta (MkLit e)          = evalExp e >>= return.(Lit).strVal
 unMeta (MkCal nt inh syn) = do xs <- mapM evalExp inh 
                                ys <- mapM evalExp syn
                                return $ NT nt (map expFromVal xs) (map varNameFromVal ys)

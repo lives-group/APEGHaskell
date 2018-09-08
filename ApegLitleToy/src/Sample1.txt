@@ -1,3 +1,7 @@
+define sfor {
+   while -> "while" 
+}
+
 {
   i := 0;
   x := i+1;

@@ -44,6 +44,7 @@ data Expr = Str String                                  -- string literal
 
  -- Combinators for dynamically building PEGS 
 data MAPeg = MkLambda 
+           | MkLit Expr
            | MkCal NonTerminal [Expr] [Expr]
            | MkKle Expr 
            | MkNot Expr

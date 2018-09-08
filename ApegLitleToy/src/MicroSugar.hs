@@ -57,21 +57,23 @@ g = EVar "g"
 -- ========== MicroSugar APEG Grammar ============= --
 
 
+microSugar :: ApegGrm
+microSugar = sugar ++ micro
+
 micro :: ApegGrm
 micro = [ruleBlock,ruleStmt,ruleExpr,ruleCExpr,ruleFator]
 
 microExp = [ruleCExpr,ruleFator]
 
 sugar :: ApegGrm 
-sugar = [ruleProg,ruleNewSyn,ruleRule]
+sugar = [ruleProg,ruleNewSyn,ruleRule, rulePattern, ruleSeq,ruleKFator ,rulepFator]
 
 ruleProg :: ApegRule
 ruleProg = ApegRule "prog" 
                     [(TyLanguage,"g")]
                     []
-                    (Kle (NT "newSyn" [g] ["sigma"]))
---                     (Seq (Kle (NT "newSyn" [g] ["sigma"]))
---                          (many1 (NT "extStmt" [g,EVar "sigma"] [])))
+                    (seqs [ Kle (NT "newSyn" [g] ["sigma"]),
+                            (many1 (NT "block" [g,EVar "sigma"] []))])
 
 ruleNewSyn :: ApegRule
 ruleNewSyn = ApegRule "newSyn"
@@ -99,6 +101,7 @@ ruleRule = ApegRule "rule"
                             Bind "nt" rid,
                             whts,
                             Lit "->",
+                            whts,
                             NT "pattern" [g] ["p"]
                            ] )
 
@@ -107,8 +110,8 @@ rulePattern = ApegRule "pattern"
                         [(TyLanguage,"g")]
                         [(TyMetaAPeg,EVar "pe")]
                         (seqs [ NT "pseq" [g] ["pe"],
-                                whts,
-                                Kle (seqs [Lit "/", 
+                                Kle (seqs [whts,
+                                           Lit "/", 
                                            whts, 
                                            NT "pseq" [g] ["pd"],
                                            AEAttr [("pe",MetaPeg $ MkAlt (EVar "pe") (EVar "pd"))]])
@@ -119,15 +122,37 @@ ruleSeq :: ApegRule
 ruleSeq = ApegRule "pseq"
                         [(TyLanguage,"g")]
                         [(TyMetaAPeg,EVar "pe")]
-                        (seqs [ many1 $ seqs [Lit "!", whts, NT "pTerm" [g] ["pn"]],
-                                whts,
-                                Kle (seqs [Lit "/", 
-                                           whts, 
-                                           NT "pseq" [g] ["pd"],
-                                           AEAttr [("pe",MetaPeg $ MkAlt (EVar "pe") (EVar "pd"))]])
-                                
-                              ])
-                              
+                        (seqs [NT "pKFator" [g] ["pe"],  
+                               Kle $ seqs [
+                                           whts,
+                                           NT "pKFator" [g] ["pd"],
+                                           AEAttr [("pe",MetaPeg $ MkSeq (EVar "pe") (EVar "pd"))]
+                              ]])
+
+ruleKFator :: ApegRule 
+ruleKFator = ApegRule "pKFator" 
+                     [(TyLanguage, "g")]
+                     [(TyMetaAPeg,  EVar "pf")]
+                     (seqs [ NT "pFator" [g] ["kf"], 
+                             whts, 
+                             alts [ Seq (Lit "*") (AEAttr[("pf", MetaPeg $ MkKle (EVar "kf"))]),
+                                    Seq (Lambda)  (AEAttr[("pf", EVar "kf")])]])
+                            
+                           
+rulepFator :: ApegRule 
+rulepFator = ApegRule "pFator" 
+                     [(TyLanguage, "g")]
+                     [(TyMetaAPeg,  EVar "pf")]
+                     (alts [seqs [ Lit "!", 
+                                   whts, 
+                                   NT "pFator" [g] ["f"], 
+                                   AEAttr[("pf",MetaPeg $ MkNot (EVar "f"))] ],
+                            seqs [ Lit "\"", 
+                                  Bind "f" rid, 
+                                  Lit "\"", 
+                                  AEAttr[("pf",MetaPeg $ MkLit (EVar "f"))]]
+                           ])
+
 ruleExtStmt :: ApegRule
 ruleExtStmt = ApegRule "rStmt"
                        [(TyLanguage,"g")]

@@ -1,5 +1,13 @@
 define sfor {
-   while -> "while" 
+   stmt -> whites "while" whites "(" whites cexpr whites ")" whites block;
+   
+}
+
+syntax sfor {
+   j := 0;
+   while(j < 10){
+      j := j + 1; 
+   }
 }
 
 {

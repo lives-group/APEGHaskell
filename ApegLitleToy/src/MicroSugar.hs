@@ -30,6 +30,9 @@ upper = chrs ['A'..'Z']
 lower :: APeg
 lower = chrs ['a'..'z']
 
+lit :: APeg
+lit = Kle $ chrs "()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}"
+
 identifier :: APeg
 identifier = Seq lower (Kle (Alt lower digit ))
 
@@ -58,22 +61,32 @@ g = EVar "g"
 
 
 microSugar :: ApegGrm
-microSugar = sugar ++ micro
+microSugar = sugar ++ [ruleExtStmt] ++ micro
 
 micro :: ApegGrm
-micro = [ruleBlock,ruleStmt,ruleExpr,ruleCExpr,ruleFator]
+micro = [ruleBlock,ruleStmt,ruleExpr,ruleCExpr,ruleFator,whiteRule]
 
 microExp = [ruleCExpr,ruleFator]
 
 sugar :: ApegGrm 
 sugar = [ruleProg,ruleNewSyn,ruleRule, rulePattern, ruleSeq,ruleKFator ,rulepFator]
 
+newSyn :: ApegGrm
+newSyn = ruleNewSyn:rule
+
+rule ::ApegGrm
+rule = ruleRule:peg
+
+peg :: ApegGrm 
+peg = [rulePattern, ruleSeq,ruleKFator ,rulepFator]
+
 ruleProg :: ApegRule
 ruleProg = ApegRule "prog" 
                     [(TyLanguage,"g")]
                     []
                     (seqs [ Kle (NT "newSyn" [g] ["sigma"]),
-                            (many1 (NT "block" [g,EVar "sigma"] []))])
+                            many1 $ Alt (NT "rStmt" [g,EVar "sigma"] []) (NT "block" [g] []) 
+                          ])
 
 ruleNewSyn :: ApegRule
 ruleNewSyn = ApegRule "newSyn"
@@ -82,7 +95,7 @@ ruleNewSyn = ApegRule "newSyn"
                       (seqs [AEAttr [("lan",Epsilon)],
                              Lit "define",
                              wht,
-                             Bind "n" identifier,
+                             Bind "n" rid,
                              whts,
                              Lit "{",
                              whts,
@@ -102,7 +115,9 @@ ruleRule = ApegRule "rule"
                             whts,
                             Lit "->",
                             whts,
-                            NT "pattern" [g] ["p"]
+                            NT "pattern" [g] ["p"],
+                            whts,
+                            Lit ";"
                            ] )
 
 rulePattern :: ApegRule 
@@ -148,18 +163,38 @@ rulepFator = ApegRule "pFator"
                                    NT "pFator" [g] ["f"], 
                                    AEAttr[("pf",MetaPeg $ MkNot (EVar "f"))] ],
                             seqs [ Lit "\"", 
-                                  Bind "f" rid, 
+                                  Bind "f" lit, 
                                   Lit "\"", 
-                                  AEAttr[("pf",MetaPeg $ MkLit (EVar "f"))]]
+                                  AEAttr[("pf",MetaPeg $ MkLit (EVar "f"))]],
+                            seqs [ Lit "(",
+                                   whts,
+                                   NT "pattern" [g] ["pf"],
+                                   whts,
+                                   Lit ")"],
+                            seqs [Bind "ntName" rid,
+                                  AEAttr[("pf",MetaPeg $ MkCal (EVar "ntName") [MetaExp (EVar "g")] [])] ]
+                                   
                            ])
 
 ruleExtStmt :: ApegRule
 ruleExtStmt = ApegRule "rStmt"
-                       [(TyLanguage,"g")]
+                       [(TyLanguage,"g"),(TyMap TyLanguage,"sigma")]
                        []
-                       Lambda
-
-
+                       (seqs [ whts,
+                               Lit "syntax",
+                               AEAttr [("nwSyn",Epsilon)],
+                               whts,
+                               (Bind "n" rid),
+                               AEAttr [("nwSyn",Union (MapAccess (EVar "sigma") (EVar "n")) (EVar "nwSyn"))],
+                               Kle (seqs [whts,
+                                          Lit ",", 
+                                          whts,
+                                          Bind "n" rid,
+                                          AEAttr [("nwSyn",Union (MapAccess (EVar "sigma") (EVar "n")) (EVar "nwSyn"))]
+                                         ]),
+                               whts,
+                               NT "block" [Union g (EVar "nwSyn")] []
+                               ] )
 
 
 ruleBlock :: ApegRule 
@@ -206,3 +241,13 @@ ruleFator = ApegRule "fator"
                              num,
                              identifier
                            ])
+                           
+whiteRule :: ApegRule 
+whiteRule = ApegRule "whites"
+                     [(TyLanguage, "g")]
+                     []
+                     (whts)
+                           
+runMS :: FilePath -> IO (SmallTuple)
+runMS ph = do f <- readFile ph
+              return $ simpleTestWithArgs microSugar [] f

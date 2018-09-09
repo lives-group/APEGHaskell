@@ -11,7 +11,7 @@ type TyRuleEnv = M.Map String Type -- All the variables in the scope of a rule
 type Input = String
 
 type ApegTuple = (ApegGrm, -- The "Current" Grammar (Initially g0)
-                  VEnv,  -- A stack of value enviroments   
+                  VEnv,  -- An envoironment of value enviroments   
                   TyEnv,   -- A Type Enviroment of rule and its variables. 
                   String,  -- the current string accept by the parser on the current rule.
                   Input,   -- The current input state. 
@@ -29,7 +29,7 @@ type APegSt = State (ApegTuple)
 
 
 zeroSt :: ApegGrm -> String -> ApegTuple
-zeroSt grm s = (grm,M.empty ,M.fromList zs, [],s,True)
+zeroSt grm s = (grm, M.fromList [("g",VLan grm)], M.fromList zs, [], s, True)
     where zs = map ruleEntry grm
      
 
@@ -69,10 +69,20 @@ tyEnvFromRule r = M.fromList [ruleEntry r]
 language :: APegSt (ApegGrm)
 language = get >>= \(grm,env,tyEnv,reckon,inp,res) -> return grm
 
+langExt :: ApegGrm -> APegSt ()
+langExt grm 
+     = do g  <- language
+          g' <- joinRules g grm
+          modify (\(grm,env,tyEnv,reckon,inp,res) -> (g',env,tyEnv,reckon,inp, res))
+          
+joinRules ::  ApegGrm -> ApegGrm -> APegSt ApegGrm
+joinRules g []= return g
+joinRules g (x:xs) = grmAddRule g x >>= \r -> joinRules r xs
+
 var :: String -> APegSt Value
 var s = get >>= (\(grm,env,tyEnv,reckon,inp,res) -> case env M.!? s of 
                                                       Nothing -> fail ("Undefined varibale " ++ s ++
-                                                                       " reminder input = " ++ inp)
+                                                                       " remaining input = " ++ inp)
                                                       Just v   -> return v)
 
 varSet :: String -> Value -> APegSt ()
@@ -81,6 +91,13 @@ varSet s v =  envAlter (M.insert s v)
 varsSet :: [(String,Value)] -> APegSt ()
 varsSet zs = envAlter (M.union (M.fromList zs))
 
+
+grmAddRule :: ApegGrm -> ApegRule -> APegSt ApegGrm
+grmAddRule [] r = return $ [r]
+grmAddRule (x@(ApegRule nt inh syn body):xs) r@(ApegRule nt' inh' syn' body')
+    | (nt == nt') && (inh == inh') && (syn == syn') = return $ ApegRule nt inh syn (mkAltBody body body'):xs
+    | (nt == nt') && ((inh /= inh') || (syn /= syn')) = fail ("Conflicting definitions of " ++ nt ++ " when composing languages.")
+    | (nt /= nt') = grmAddRule xs r >>= return.(x:)
 
 envAlter :: (VEnv -> VEnv) -> APegSt ()
 envAlter t = get >>= (\(grm,env,tyEnv,reckon,inp,res) -> put (grm,t env,tyEnv,reckon,inp,res)) 

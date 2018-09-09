@@ -7,6 +7,19 @@ import APEGState
 import APEGTypeSystem
 
 
+alts :: [APeg] -> APeg
+alts  = foldl1 Alt
+
+seqs :: [APeg] -> APeg
+seqs = foldl1 Seq
+
+chrs :: [Char] -> APeg
+chrs = alts.(map (Lit.(:[])))
+
+many1 :: APeg -> APeg
+many1 p = Seq p (Kle p) 
+
+
 
 -- ================= EXAMPLE 1 =================
 -- Testing simple PEG and APEG expressions !
@@ -97,4 +110,40 @@ r3ex3 :: ApegRule
 r3ex3 = ApegRule "NUM" [(TyLanguage, "g")] [] (let x = (Alt (Lit "0") (Lit "1")) in Seq x (Kle x))
 
 
+-- ===============
 
+
+meta01 = MkSeq (MetaPeg $ MkLit (Str "o")) (MetaPeg $ MkKle $ MetaPeg (MkAlt (MetaPeg $ MkLit (Str "0")) (MetaPeg $ MkLit (Str "1"))))
+metaAB = MkKle $ MetaPeg (MkAlt (MetaPeg $ MkLit (Str "A")) (MetaPeg $ MkLit (Str "B")))
+
+mr1 = MkRule (Str "fator") [(TyLanguage,"g")] [] (MetaPeg meta01)
+
+grmExtension :: ApegGrm
+grmExtension = [ruleStart, ruleExt, ruleFator] 
+
+
+
+ruleStart :: ApegRule 
+ruleStart = ApegRule "start"
+                     [(TyLanguage,"g")]
+                     []
+                     (seqs [NT "ext" [EVar "g"] ["sigma"],
+                            NT "fator" [Union (EVar "g") (EVar "sigma")] [] ] )
+
+ruleExt :: ApegRule 
+ruleExt = ApegRule "ext"
+                    [(TyLanguage,"g")]
+                    [(TyLanguage, EVar "si")]
+                    (alts [seqs [Lit ".", AEAttr [("si",mr1)]],
+                           seqs [Lit ",", AEAttr [("si",MkRule (Str "fator") 
+                                                               [(TyLanguage,"g")] 
+                                                               [] 
+                                                               (MetaPeg metaAB)) ]],
+                           seqs [Lambda, AEAttr [("si",Epsilon)]]
+                           ])
+                    
+ruleFator :: ApegRule 
+ruleFator = ApegRule "fator"
+                     [(TyLanguage,"g")]
+                     []
+                     (Kle $ alts [ Lit "x", Lit "y"  ])

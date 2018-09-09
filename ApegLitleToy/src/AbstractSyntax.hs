@@ -27,7 +27,7 @@ data APeg = Lambda
          | Alt APeg APeg
          | AEAttr [(Var,Expr)]                          -- The list of attributions of expressions to varaibales
          | Bind Var APeg
-         deriving Show
+         deriving (Show,Eq)
 
 data Expr = Str String                                  -- string literal
           | Epsilon                                     -- The empty language
@@ -40,18 +40,18 @@ data Expr = Str String                                  -- string literal
           | MpLit [(Expr,Expr)]                          -- map literal
           | MapIns Expr Expr Expr                       -- Map insertion method: m[s / v] means MapIns m s v 
           | MapAccess Expr Expr                         -- Map Access method: m[s] = MapAccess m s
-          deriving Show
+          deriving (Show,Eq)
 
  -- Combinators for dynamically building PEGS 
 data MAPeg = MkLambda 
            | MkLit Expr
-           | MkCal NonTerminal [Expr] [Expr]
+           | MkCal Expr [Expr] [Expr]
            | MkKle Expr 
            | MkNot Expr
            | MkSeq Expr Expr
            | MkAlt Expr Expr
            | MkAE [(Var,Expr)] 
-           deriving Show
+           deriving (Show,Eq)
 
 -- data TyExpr = MkTyStr
 --             | MkTyMap Expr
@@ -127,10 +127,11 @@ fetch [] _ = Nothing
 fetch (x@(ApegRule nt _ _ _  ):xs) s
     | nt == s = Just x
     | otherwise = fetch xs s
-    
+
+
 mkAltBody :: APeg -> APeg -> APeg
 mkAltBody x y = Alt x y
-    
+
 grmExtRule :: ApegGrm -> NonTerminal -> APeg -> ApegGrm
 grmExtRule [] _ _ = []
 grmExtRule (x@(ApegRule nt inh syn body):xs) nt' newAlt 

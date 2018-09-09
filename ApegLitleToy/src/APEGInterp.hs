@@ -21,11 +21,19 @@ bindPeg v p  = do prfx <- getStr
                   varSet v (VStr res)
                                     
 callNt :: String -> [Value] -> [Var] -> APegSt ()
-callNt nt vs@((VLan g):inh) vars = 
-   case fetch g nt of
-     Just r  -> interpRule vs vars r 
-     Nothing -> fail ("Attempt to call inexisiting rule: " ++ nt)
+callNt nt vs@((VLan g):inh) vars
+   = case fetch g nt of
+            Just r  -> interpRule vs vars r 
+            Nothing -> fail ("Attempt to call non-existent rule: " ++ nt)
 callNt _ _ _ = fail "Panic !, Missing Language Attribute !" 
+
+interpRule :: [Value] -> [Var] -> ApegRule -> APegSt ()
+interpRule vs os (ApegRule nt inh syn b) 
+     = do zs <- supresEnv (envFromDec inh vs) 
+                          (interp b >> 
+                           onSucess (mapM (evalExp.snd) syn >>= \ws -> return $ zip os ws)
+                                    (return []))
+          varsSet zs
 
 ruleCreate :: String -> [(Type,Var)] -> [(Type,Value)] -> Value -> APegSt (Value)
 ruleCreate s inh syn b
@@ -39,16 +47,19 @@ dynRule _ _ _ = fail "Unproper attempt to compose an existing rule !"
 
 -- =================== Monad Utilities =================== --
 
+
 lanUnion :: Value -> Value -> APegSt Value
-lanUnion (VLan l1) (VLan l2) = return $ VLan (l1++l2)
+lanUnion (VLan l1) (VLan l2) = joinRules l1 l2 >>= return.VLan
 lanUnion _ _ = fail "Attempt to unite two values that aren't languages"
+
 
 unMeta :: MAPeg -> APegSt (APeg)
 unMeta MkLambda           = return $ Lambda
 unMeta (MkLit e)          = evalExp e >>= return.(Lit).strVal
-unMeta (MkCal nt inh syn) = do xs <- mapM evalExp inh 
+unMeta (MkCal nt inh syn) = do ntv <- evalExp nt 
+                               xs <- mapM evalExp inh 
                                ys <- mapM evalExp syn
-                               return $ NT nt (map expFromVal xs) (map varNameFromVal ys)
+                               return $ NT (strVal ntv) (map expFromVal xs) (map varNameFromVal ys)
 unMeta (MkKle e)          = evalExp e >>= return.(Kle).apegFromVal
 unMeta (MkNot e)          = evalExp e >>= return.(Not).apegFromVal
 unMeta (MkSeq x y)        = evalExp x >>= \px -> evalExp y >>= \py -> return $ Seq (apegFromVal px) ((apegFromVal py))
@@ -100,8 +111,8 @@ evalExp (MapAccess m i) = do mp  <- evalExp m
 interp :: APeg -> APegSt ()
 interp (Lambda)       =  done
 interp (Lit s)        = patternMatch s
-interp (NT s inh ret) = do inh <- (mapM evalExp inh >>= implicitLanArg)
-                           callNt s inh ret 
+interp (NT s inh ret) = do inh' <- (mapM evalExp inh {->>= implicitLanArg-})
+                           callNt s inh' ret 
 interp (Kle p)        = klenne (interp p) >> return ()
 interp (Seq e d)      = sequential (interp e) (interp d)
 interp (Alt e d)      = alternate (interp e) (interp d)
@@ -109,14 +120,6 @@ interp (Not e)        = notPeg (interp e)
 interp (AEAttr xs)    = mapM_ bind xs
 interp (Bind v p)     = bindPeg v p
 
-
-interpRule :: [Value] -> [Var] -> ApegRule -> APegSt ()
-interpRule vs os (ApegRule nt inh syn b) 
-     = do zs <- supresEnv (envFromDec inh vs) 
-                          (interp b >> 
-                           onSucess (mapM (evalExp.snd) syn >>= \ws -> return $ zip os ws)
-                                    (return []))
-          varsSet zs
                                              
 interpGrammar :: [(Var,Value)] -> ApegGrm -> APegSt ()
 interpGrammar vs [] = return ()
@@ -124,8 +127,8 @@ interpGrammar vs grm@((ApegRule nt _ syn b):_)
        = do envAlter (\_ -> M.fromList (f vs))
             interp b
             onSucess (mapM (evalExp.snd) syn >>= \ws -> varsSet (outs ws))
-                     (get >>= \(grm,env,tyenv,reckon,inp,r) -> 
-                               fail ("Rule " ++ nt ++ " has failed. Reminder input \"" ++ (take 30 inp) ++ "\"." ))
+                     (get >>= \st@(grm,env,tyenv,reckon,inp,r) -> 
+                               fail ("Rule " ++ nt ++ " has failed. Remaining input \"" ++ (take 30 inp) ++ "\".\n" ++ (show st)))
                                                                             
     where outs l = zip [ "_varOut" ++ (show i) | i <- [1..length syn] ] l
           f [] = [("g",VLan grm)]

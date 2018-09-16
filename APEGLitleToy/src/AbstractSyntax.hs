@@ -50,7 +50,7 @@ data MAPeg = MkLambda
            | MkNot Expr
            | MkSeq Expr Expr
            | MkAlt Expr Expr
-           | MkAE [(Var,Expr)] 
+           | MkAE [(Expr,Expr)] 
            deriving (Show,Eq)
 
 -- data TyExpr = MkTyStr

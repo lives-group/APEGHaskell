@@ -64,7 +64,9 @@ unMeta (MkKle e)          = evalExp e >>= return.(Kle).apegFromVal
 unMeta (MkNot e)          = evalExp e >>= return.(Not).apegFromVal
 unMeta (MkSeq x y)        = evalExp x >>= \px -> evalExp y >>= \py -> return $ Seq (apegFromVal px) ((apegFromVal py))
 unMeta (MkAlt x y)        = evalExp x >>= \px -> evalExp y >>= \py -> return $ Alt ((apegFromVal px)) (apegFromVal py)
-unMeta (MkAE xs)          = do ys <- mapM (\(v,e) -> evalExp e >>= (\r -> return (v,expFromVal r))) xs
+unMeta (MkAE xs)          = do ys <- mapM (\(ev,ee) -> do r <- evalExp ee
+                                                          v <- evalExp ev
+                                                          return (strVal v,expFromVal r)) xs
                                return $ AEAttr ys
 
 mapInsert :: Value -> String -> Value -> APegSt (Value)

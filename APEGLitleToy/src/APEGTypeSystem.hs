@@ -99,6 +99,48 @@ inferTypeExpr nt r@(MkRule grm inh syn mapeg)
 inferTypeExpr nt (MetaPeg mpeg) = undefined -- inferTypeMpeg nt mpeg 
 inferTypeExpr nt (MetaExp mexp) = undefined -- inferTypeMExpr nt mexp
 
+onType :: Type -> Type -> APegSt a -> APegSt a -> APegSt a
+onType tref t suc failure
+    | tref == t = suc
+    | otherwise = failure
+
+
+metaTypeError :: MAPeg -> Type -> APegSt a
+metaTypeError ma t = fail ("Incompatible types at metaExpression " ++ (show ma) ++ ". It's argument should have type MetaAPeg, but has type" ++ show t)
+
+inferTypeMpeg :: NonTerminal -> MAPeg -> APegSt (Type)
+inferTypeMpeg nt MkLambda = return TyMetaAPeg
+inferTypeMpeg nt mp@(MkLit e) = inferTypeExpr nt e >>=
+                                \t -> onType TyMetaAPeg t (return t) (metaTypeError mp t)
+inferTypeMpeg nt mp@(MkCal nte xs ys) = do tnt <- inferTypeExpr nt  nte 
+                                           txs <- mapM (inferTypeExpr nt) xs   
+                                           tys <- mapM (inferTypeExpr nt) ys 
+                                           onType TyStr
+                                                  tnt
+                                                  (if (all isMetaType (txs ++ tys)) 
+                                                       then return TyLanguage 
+                                                       else fail ("All arguments of " ++ (show mp) ++ " must have TyMetaExp type"))  
+                                                  (fail ("The expression " ++ (show nte) ++ " should have type TyStr")) 
+inferTypeMpeg nt mp@(MkKle e) = inferTypeExpr nt e >>=
+                                \t -> onType TyMetaAPeg t (return t) (metaTypeError mp t)
+inferTypeMpeg nt mp@(MkNot e) = inferTypeExpr nt e >>=
+                                \t -> onType TyMetaAPeg t (return t) (metaTypeError mp t)
+inferTypeMpeg nt mp@(MkSeq ee ed) 
+    = do t <- inferTypeExpr nt ee 
+         onType TyMetaAPeg 
+                t 
+                (inferTypeExpr nt ed >>= 
+                 \t' -> onType TyMetaAPeg t' (return t') (metaTypeError mp t')) 
+                (metaTypeError mp t)
+inferTypeMpeg nt mp@(MkAlt ee ed) 
+    = do t <- inferTypeExpr nt ee 
+         onType TyMetaAPeg 
+                t 
+                (inferTypeExpr nt ed >>= \t' -> onType TyMetaAPeg t' (return t') (metaTypeError mp t')) 
+                (metaTypeError mp t)
+inferTypeMpeg nt mp@(MkAE xs) = mapM 
+
+
 inferPegType :: NonTerminal -> APeg -> APegSt Type
 inferPegType nt Lambda   = return TyAPeg
 inferPegType nt (Lit _)  = return TyAPeg

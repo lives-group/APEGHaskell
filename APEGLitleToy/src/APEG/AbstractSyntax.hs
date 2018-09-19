@@ -1,5 +1,5 @@
  
-module AbstractSyntax where
+module APEG.AbstractSyntax where
 
 import Control.Monad
 import Data.Char 
@@ -9,6 +9,7 @@ import Test.QuickCheck
 
 
 type NonTerminal = String
+
 type Var = String
 
 type ApegGrm = [ApegRule]

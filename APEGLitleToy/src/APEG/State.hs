@@ -1,37 +1,133 @@
-module APEGState where
 
-import AbstractSyntax
+{-|
+Module      : APEG.State
+Description : Representation of a state for the APEG interpreter/type-checker
+Copyright   : (c) Leonardo Vieira dos Santos Reis, 2018
+                  Rodrigo Geraldo Ribeiro, 2018
+                  Elton M. Cardoso, 2018
+License     : GPL-3
+Stability   : experimental
+Portability : POSIX
+
+This module contains the definition of an APEG state used throughout the interpreter and type-checker.
+The abstract data type allows for consulting and updating value and type environments, obtain the
+string currently accepted by the recognizer, setting and consulting and transforming the results and
+finally manipulation of the input.
+
+-}
+
+module APEG.State(
+    APegTuple,
+    Result,
+    APegSt,
+    VEnv,
+    TyEnv,
+    TyRuleEnv,
+    TraceStr,
+    Input,
+    rVal,
+    rErr,
+
+    errorTuple,
+    isOkTuple,
+    valEnv,
+    tyEnv,
+    upValEnv,
+    upTyEnv,
+    withResult,
+        
+    valIsMExpr,
+    valIsMPeg,
+    strVal,
+    expFromVal,
+    varNameFromVal,
+    apegFromVal,
+        
+    zeroSt,
+    ruleEntry,
+        
+    isOk
+    ) where
+        
+
+import APEG.AbstractSyntax
 import qualified Data.Map as M
 import Control.Monad.State.Lazy
 
+-- | Value environment, a mapping form names to 'Values'
 type VEnv  = M.Map String Value 
+
+-- | Type environment, a mapping from names to a non terminal 'Type' an 
+-- it's inner enviroment
 type TyEnv = M.Map String (Type , TyRuleEnv) 
-type TyRuleEnv = M.Map String Type -- All the variables in the scope of a rule
 
-type Input = String
+-- | Type environment for a rule. Maps varialble names to 
+type TyRuleEnv = M.Map String Type 
 
-type ApegTuple = (ApegGrm, -- The "Current" Grammar (Initially g0)
-                  VEnv,  -- An envoironment of value enviroments   
-                  TyEnv,   -- A Type Enviroment of rule and its variables. 
-                  String,  -- the current string accept by the parser on the current rule.
-                  Input,   -- The current input state. 
-                  Bool)    -- The Result of las operation
+-- | The recognizer input is represented by an String.
+type Input = String 
 
-type SmallTuple = (VEnv,  -- A stack of value enviroments   
-                   String,  -- the current string accept by the parser on the current rule.
-                   Input,   -- The current input state. 
-                   Bool)    -- The Result of las operation
+-- | The result buit by a parser. Can either be an list of error messages or
+-- an actual value of some type a.
+type Result a = Either [String] a
+    
+
+
+-- | APeggTuple is the state representation for the APEG interpreter. It consists of
+-- an value enviroment 'VEnv', which contains the mapping of names to values, a type
+-- enviroment 'TyEnv', that contains all related information about the types of rules
+-- an its attributes. The 'TraceStr' argument keeps track of the string being recognized
+-- since the last APEG Bind Command. The 'Input' contais the input to be passed to the parser.
+-- The 'Result' is the result built by the parser.
+type APegTuple a =
+                   (VEnv,      --  An envoironment of values  
+                    TyEnv,     --  A type enviroment for a rule and it's local variables. 
+                    TraceStr,  --  The current string accept by current rule. It may be a null String.
+                    Input,     --  The current input text. 
+                    Result a)  --  The Result of last operation. It may contain a value.
+
+type SmallTuple = (VEnv,    --  A stack of value enviroments   
+                   String,  --  the current string accept by the parser on the current rule.
+                   Input,   --  The current input state. 
+                   Bool)    --  The Result of las operation
 
 -- State for the APEG interpreter: 
-type APegSt = State (ApegTuple) 
+type APegSt a = State (APegTuple a) 
+
+-- | Builds a success Result from a particular value.
+rVal :: a -> Result a 
+rVal = Right
+
+-- | Builds a failure Result from an error message.
+rErr :: String -> Result a
+rErr s = Left [s] 
 
 
+-- | Adds an error message to the result of t
+error ::  String -> APegTuple a ->  APegTuple a
+errorTuple s (ve,te,rec,inp,Left m) =  (ve,te,rec,inp,Left (s:m))
+errorTuple s (ve,te,rec,inp,_) =  (ve,te,rec,inp,Left [s])
 
+isOkTuple :: APegTuple a -> Bool
+isOkTuple (ve,te,rec,inp,Left _)  = False 
+isOkTuple (ve,te,rec,inp,Right _) = True
 
-zeroSt :: ApegGrm -> String -> ApegTuple
-zeroSt grm s = (grm, M.fromList [("g",VLan grm)], M.fromList zs, [], s, True)
-    where zs = map ruleEntry grm
-     
+valEnv :: APegTuple a -> VEnv
+valEnv (ve,te,rec,inp,_) = ve
+
+tyEnv :: APegTuple a -> TyEnv
+tyEnv (ve,te,rec,inp,_) = te
+
+upValEnv :: (VEnv -> VEnv) -> APegTuple a -> APegTuple a
+upValEnv f (ve,te,rec,inp,r) = (f ve,te,rec,inp,r)
+
+upTyEnv :: (TyEnv -> TyEnv) -> APegTuple a -> APegTuple a
+upTyEnv f (ve,te,rec,inp,r) = (ve,f te,rec,inp,r)
+
+withResult :: ([String] -> Result b) -> (a -> Result b) -> APegTuple a -> APegTuple b
+withResult err f (ve,te,rec,inp,Left s) = (ve,te,rec,inp, err s)
+withResult err f (ve,te,rec,inp,Right r) = (ve,te,rec,inp, f r)
+
 
 valIsMExpr :: Value -> Bool
 valIsMExpr (VExp _) = True
@@ -50,16 +146,25 @@ expFromVal (VExp e) = e
 varNameFromVal :: Value -> Var
 varNameFromVal (VExp (Str s)) = s
 
-
 apegFromVal :: Value -> APeg
 apegFromVal (VPeg e) = e
 
+zeroSt :: ApegGrm -> String -> APegTuple ()
+zeroSt grm s = (M.fromList [("g",VLan grm)], M.fromList zs, nullTraceStr, s, Right ())
+    where zs = map ruleEntry grm
+
+
+ruleEntry :: ApegRule -> (NonTerminal,(Type, TyRuleEnv))
+ruleEntry (ApegRule nt inh syn _ ) = (nt,(TyRule (map fst inh) (map fst syn),M.fromList (map (\(a,b) -> (b,a)) inh)))    
+
+
+{-
+
+isOk :: APegSt () Bool
+isOk = get >>= return.isOkTuple
 
 matchAll :: [Type] -> [Type] -> Bool
 matchAll xs ys = (and $ zipWith (==) xs ys) && ((length xs) == (length ys))
-
-ruleEntry :: ApegRule -> (NonTerminal,(Type, TyRuleEnv))
-ruleEntry (ApegRule nt inh syn _ ) = (nt,(TyRule (map fst inh) (map fst syn),M.fromList (map (\(a,b) -> (b,a)) inh)))
 
 tyEnvFromRule :: ApegRule -> TyEnv
 tyEnvFromRule r = M.fromList [ruleEntry r]
@@ -158,8 +263,7 @@ getStr = do (g,env,tyEnv,reckon,inp,res) <- get
 resetStr :: APegSt () 
 resetStr = modify (\(grm,env,tyEnv,reckon,inp,res) -> (grm,env,tyEnv,[],inp,res))
                      
-isOk :: APegSt (Bool)
-isOk = get >>= \(grm,env,tyEnv,reckon,inp,res) -> return res
+
 
 supresEnv :: VEnv -> APegSt a -> APegSt a
 supresEnv nwEnv b = do oldEnv <- envSwap nwEnv
@@ -178,4 +282,4 @@ supresTyEnv :: TyEnv -> APegSt a -> APegSt a
 supresTyEnv nwEnv b = do oldEnv <- tyEnvSwap nwEnv
                          r <- b
                          tyEnvSwap oldEnv
-                         return r
+                         return r-}

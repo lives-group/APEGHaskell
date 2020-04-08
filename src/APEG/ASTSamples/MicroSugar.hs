@@ -1,10 +1,13 @@
 module MicroSugar where
 
-import APEGInterp
+import APEG.Interpreter.APEGInterp
+import APEG.Interpreter.MonadicState
+import APEG.Interpreter.MaybeString
+import APEG.Interpreter.State
 import Control.Monad.State.Lazy
-import AbstractSyntax
-import APEGState
-import APEGTypeSystem
+import APEG.AbstractSyntax
+import APEG.Interpreter.State
+import APEG.TypeSystem
 
 alts :: [APeg] -> APeg
 alts  = foldl1 Alt
@@ -61,37 +64,22 @@ g = EVar "g"
 
 
 microSugar :: ApegGrm
-microSugar = sugar ++ [ruleExtStmt] ++ micro
+microSugar = [ruleProg,ruleNewSyn,ruleRule,rulePattern,ruleSeq,ruleExtStmt,ruleKFator,rulepFator,ruleExpr,ruleBlock,ruleStmt,ruleCExpr,ruleFator,whiteRule]
 
-micro :: ApegGrm
-micro = [ruleBlock,ruleStmt,ruleExpr,ruleCExpr,ruleFator,whiteRule]
-
-microExp = [ruleCExpr,ruleFator]
-
-sugar :: ApegGrm 
-sugar = [ruleProg,ruleNewSyn,ruleRule, rulePattern, ruleSeq,ruleKFator ,rulepFator]
-
-newSyn :: ApegGrm
-newSyn = ruleNewSyn:rule
-
-rule ::ApegGrm
-rule = ruleRule:peg
-
-peg :: ApegGrm 
-peg = [rulePattern, ruleSeq,ruleKFator ,rulepFator]
 
 ruleProg :: ApegRule
 ruleProg = ApegRule "prog" 
                     [(TyLanguage,"g")]
                     []
-                    (seqs [ Kle (NT "newSyn" [g] ["sigma"]),
+                    (seqs [ AEAttr [("sigma",MapLit [(Str "0",Epsilon)])],
+                            Kle (NT "newSyn" [g] ["sigma"]),
                             many1 $ Alt (NT "rStmt" [g,EVar "sigma"] []) (NT "block" [g] []) 
                           ])
 
 ruleNewSyn :: ApegRule
 ruleNewSyn = ApegRule "newSyn"
                       [(TyLanguage,"g")]
-                      [(TyMap TyLanguage,EVar "s")]
+                      [(TyMap TyGrammar,EVar "s")]
                       (seqs [AEAttr [("lan",Epsilon)],
                              Lit "define",
                              wht,
@@ -103,13 +91,13 @@ ruleNewSyn = ApegRule "newSyn"
                                          AEAttr [("lan", Union (EVar "lan") (EVar "r"))]],
                              whts,
                              Lit "}",
-                             AEAttr [("s",MpLit [(EVar "n",EVar "lan")])] 
+                             AEAttr [("s",MapLit [(EVar "n",EVar "lan")])] 
                             ])
                                 
 ruleRule :: ApegRule
 ruleRule = ApegRule "rule"
-                    [(TyLanguage,"g")] -- Tem um problema aqui ! A syntaxe não tem meios para falar de tipos !
-                    [(TyLanguage,MkRule (EVar "nt") [(TyLanguage,"g")] [] (EVar "p"))]
+                    [(TyLanguage,"g")] -- Tem um problema aqui ! A sintaxe não tem meios para falar de tipos !
+                    [(TyGrammar,MkRule (EVar "nt") [(MetaExp MkTyLanguage,Str "g")] [] (EVar "p"))]
                     (seqs [ whts,
                             Bind "nt" rid,
                             whts,
@@ -132,7 +120,7 @@ rulePattern = ApegRule "pattern"
                                            AEAttr [("pe",MetaPeg $ MkAlt (EVar "pe") (EVar "pd"))]])
                                 
                               ])
-                              
+--                               
 ruleSeq :: ApegRule 
 ruleSeq = ApegRule "pseq"
                         [(TyLanguage,"g")]
@@ -172,13 +160,13 @@ rulepFator = ApegRule "pFator"
                                    whts,
                                    Lit ")"],
                             seqs [Bind "ntName" rid,
-                                  AEAttr[("pf",MetaPeg $ MkCal (EVar "ntName") [MetaExp (EVar "g")] [])] ]
+                                  AEAttr[("pf",MetaPeg $ MkCal (EVar "ntName") [MetaExp (MVar $ Str "g")] [])] ]
                                    
                            ])
 
 ruleExtStmt :: ApegRule
 ruleExtStmt = ApegRule "rStmt"
-                       [(TyLanguage,"g"),(TyMap TyLanguage,"sigma")]
+                       [(TyLanguage,"g"),(TyMap TyGrammar,"sigma")]
                        []
                        (seqs [ whts,
                                Lit "syntax",
@@ -248,6 +236,8 @@ whiteRule = ApegRule "whites"
                      []
                      (whts)
                            
-runMS :: FilePath -> IO (SmallTuple)
+runMS :: FilePath -> IO (VEnv,MybStr,String,Result)
 runMS ph = do f <- readFile ph
               return $ simpleTestWithArgs microSugar [] f
+              
+

@@ -1,0 +1,11 @@
+define sfor {
+   stmt -> whites "for" whites expr whites "to" whites expr whites block;   
+}
+
+{
+  i := 0;
+  x := i+1;
+  if(i < 10){
+     i := i + 1;
+  }
+}

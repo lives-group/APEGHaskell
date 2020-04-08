@@ -1,10 +1,13 @@
-module LangSample where
+module APEG.ASTSamples.LangSample where
 
-import APEGInterp
+import APEG.Interpreter.APEGInterp
+import APEG.Interpreter.MonadicState
+import APEG.Interpreter.State
+import APEG.Interpreter.MaybeString
 import Control.Monad.State.Lazy
-import AbstractSyntax
-import APEGState
-import APEGTypeSystem
+import APEG.AbstractSyntax
+-- import APEGState
+import APEG.TypeSystem
 
 
 alts :: [APeg] -> APeg
@@ -19,26 +22,28 @@ chrs = alts.(map (Lit.(:[])))
 many1 :: APeg -> APeg
 many1 p = Seq p (Kle p) 
 
+g :: Expr
+g = EVar "g"
 
 
 -- ================= EXAMPLE 1 =================
 -- Testing simple PEG and APEG expressions !
 
 
-runEx1 :: String -> ((),ApegTuple) 
+runEx1 :: String -> ((),PureState) 
 runEx1 s = runState (interp r1ex1)  (zeroSt [] s)
 
-runEx2 :: String -> ((),ApegTuple) 
+runEx2 :: String -> ((),PureState) 
 runEx2 s = runState (interp r2ex1)  (zeroSt [] s)
 
-runEx3 :: String -> ((),ApegTuple) 
+runEx3 :: String -> ((),PureState) 
 runEx3 s = runState (interp r3ex1)  (zeroSt [] s)
 
-runEx4 :: String -> ((),ApegTuple) 
+runEx4 :: String -> ((),PureState) 
 runEx4 s = runState (interp r4ex1)  (zeroSt [] s)
 -- ac*a
 r1ex1 :: APeg
-r1ex1 = Seq (Lit "a")      
+r1ex1 = Seq (Lit "a") 
             (Seq (Kle (Lit "c")) (Lit "a"))
  
 -- a / c*b 
@@ -69,7 +74,7 @@ r4ex1 = Alt (Seq (AEAttr [("y",Str "Yka")] )
 -- S[Lan g] -> 'a' S<g> 'b'
 --           / '.'
 
-runGrmEx1 ::   String -> SmallTuple 
+runGrmEx1 ::   String -> (VEnv,MybStr,String,Result) 
 runGrmEx1 s = simpleTestWithArgs ex2 [] s
 
 ex2 :: ApegGrm
@@ -80,19 +85,19 @@ r1ex2 = ApegRule "S"
                  [(TyLanguage,"g")] 
                  [] 
                  ( Alt (Seq (Lit "a")
-                            (Seq (NT "S" [] [])
+                            (Seq (NT "S" [EVar "g"] [])
                                  (Lit "b")))
                        (Lit ".") )
                        
 --  ================= EXAMPLE 3 =================
 -- Using Bind : 
 -- 
--- S[Lan g] returns [String out] -> out = NUM 
---                                / ou = VAR
+-- S[Lan g] returns [String out] -> out = VAR 
+--                                / out = NUM
 -- NUM[Lan g] -> (0 \ 1) (0 \ 1)*
 -- VAR[Lan g] -> ('A' \ 'B') ('A' \ 'B')*
 
-runGrmEx3 ::   String -> SmallTuple 
+runGrmEx3 ::   String -> (VEnv,MybStr,String,Result) 
 runGrmEx3 s = simpleTestWithArgs ex3 [] s
 
 ex3 :: ApegGrm
@@ -100,7 +105,7 @@ ex3 = [r1ex3,r2ex3,r3ex3]
 
 r1ex3 :: ApegRule
 r1ex3 = ApegRule "S" [(TyLanguage, "g")] [(TyStr,EVar "out")]  ( Alt (Bind "out" (NT "VAR" [EVar "g"] [])) 
-                                                               (Bind "out" (NT "NUM" [EVar "g"] [])) )
+                                                                     (Bind "out" (NT "NUM" [EVar "g"] [])) )
 
 r2ex3 :: ApegRule
 r2ex3 = ApegRule "VAR" [(TyLanguage, "g")] [] (let x = (Alt (Lit "A") (Lit "B")) in Seq x (Kle x))
@@ -116,7 +121,7 @@ r3ex3 = ApegRule "NUM" [(TyLanguage, "g")] [] (let x = (Alt (Lit "0") (Lit "1"))
 meta01 = MkSeq (MetaPeg $ MkLit (Str "o")) (MetaPeg $ MkKle $ MetaPeg (MkAlt (MetaPeg $ MkLit (Str "0")) (MetaPeg $ MkLit (Str "1"))))
 metaAB = MkKle $ MetaPeg (MkAlt (MetaPeg $ MkLit (Str "A")) (MetaPeg $ MkLit (Str "B")))
 
-mr1 = MkRule (Str "fator") [(TyLanguage,"g")] [] (MetaPeg meta01)
+mr1 = MkRule (MetaExp $ MStr (Str "fator")) [(MetaExp MkTyLanguage,MetaExp $ MVar (Str "g"))] [] (MetaPeg meta01)
 
 grmExtension :: ApegGrm
 grmExtension = [ruleStart, ruleExt, ruleFator] 
@@ -135,8 +140,8 @@ ruleExt = ApegRule "ext"
                     [(TyLanguage,"g")]
                     [(TyLanguage, EVar "si")]
                     (alts [seqs [Lit ".", AEAttr [("si",mr1)]],
-                           seqs [Lit ",", AEAttr [("si",MkRule (Str "fator") 
-                                                               [(TyLanguage,"g")] 
+                           seqs [Lit ",", AEAttr [("si",MkRule (MetaExp $ MStr (Str "fator")) 
+                                                               [(MetaExp MkTyLanguage,MetaExp $ MVar (Str "g"))] 
                                                                [] 
                                                                (MetaPeg metaAB)) ]],
                            seqs [Lambda, AEAttr [("si",Epsilon)]]

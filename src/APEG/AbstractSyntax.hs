@@ -1,5 +1,5 @@
  
-module AbstractSyntax where
+module APEG.AbstractSyntax where
 
 import Control.Monad
 import Data.Char 
@@ -9,39 +9,51 @@ import Test.QuickCheck
 
 
 type NonTerminal = String
+
 type Var = String
 
 type ApegGrm = [ApegRule]
-
-
  
 -- ApegRule  (Name or String) (Inherited Syntatical Parameters)
 data ApegRule = ApegRule NonTerminal [(Type,Var)] [(Type,Expr)] APeg deriving Show
 
-data APeg = Lambda                            
-         | Lit String
+data APeg = Lambda                            -- ^ The Lambda Literal
+         | Lit String                         -- ^ The String Literal
          | NT NonTerminal [Expr] [Var]
          | Kle APeg
          | Not APeg
          | Seq APeg APeg
          | Alt APeg APeg
-         | AEAttr [(Var,Expr)]                          -- The list of attributions of expressions to varaibales
+         | AEAttr [(Var,Expr)]                           -- The list of attributions of expressions to varaibales
          | Bind Var APeg
          deriving (Show,Eq)
 
-data Expr = Str String                                  -- string literal
-          | Epsilon                                     -- The empty language
-          | EVar Var                                    -- variable 
-          | MetaPeg MAPeg                               -- meta level PEG
-          | MetaExp Expr                                -- meta level Expr
-          | Union Expr Expr                             -- Uniao Language Language
-          | ExtRule Expr Expr Expr                      -- ExtRule  Grammar RuleName Apeg
-          | MkRule Expr [(Type,Var)] [(Type, Expr)] Expr -- new non terminal creation
-          | MpLit [(Expr,Expr)]                          -- map literal
-          | MapIns Expr Expr Expr                       -- Map insertion method: m[s / v] means MapIns m s v 
-          | MapAccess Expr Expr                         -- Map Access method: m[s] = MapAccess m s
+data Expr = Str String                                   -- string literal
+          | Epsilon                                      -- The empty grammar
+          | EVar Var                                     -- variable 
+          | MetaPeg MAPeg                                -- meta level PEG
+          | MetaExp MExpr                                -- meta level Expr
+          | Union Expr Expr                              -- Uniao Language Language
+          | ExtRule Expr Expr Expr                       -- ExtRule  Grammar RuleName Apeg
+          | MkRule Expr [(Expr,Expr)] [(Expr, Expr)] Expr -- new non terminal creation
+          | MapLit [(Expr,Expr)]                          -- map literal
+          | MapIns Expr Expr Expr                        -- Map insertion method: m[s / v] means MapIns m s v 
+          | MapAccess Expr Expr                          -- Map Access method: m[s] = MapAccess m s
           deriving (Show,Eq)
 
+          
+data MExpr = MVar Expr
+           | MEpsilon
+           | MStr Expr
+           | MUnion Expr Expr 
+           | MMapLit [(Expr,Expr)]
+           | MMapIns Expr Expr Expr
+           | MMapAcces Expr Expr
+           | MkTyStr
+           | MkTyLanguage
+           | MkTyMap Expr
+           deriving (Show, Eq)
+           
  -- Combinators for dynamically building PEGS 
 data MAPeg = MkLambda 
            | MkLit Expr
@@ -50,75 +62,32 @@ data MAPeg = MkLambda
            | MkNot Expr
            | MkSeq Expr Expr
            | MkAlt Expr Expr
-           | MkAE [(Var,Expr)] 
+           | MkAE [(Expr,Expr)] 
            deriving (Show,Eq)
-
--- data TyExpr = MkTyStr
---             | MkTyMap Expr
---             | MkTyRule [Expr] [Expr]
---             | 
     
 data Type = TyStr
           | TyAPeg
+          | TyGrammar
           | TyMap Type
           | TyRule [Type] [Type]
           | TyMetaAPeg
           | TyMetaExp
+          | TyMetaType
           | TyLanguage -- This type is to be attributed to Grammar whose all rules are correct.
           deriving (Show, Eq)
 
+          
+pprintType :: Type -> String
+pprintType TyStr  = "Str"
+pprintType TyAPeg = "APeg"
+pprintType TyGrammar = "Grammar"
+pprintType TyMetaAPeg = "#APeg"
+pprintType TyMetaExp = "#Exp"
+pprintType TyMetaType = "#Type"
+pprintType TyLanguage = "Lang"
+pprintType (TyMap t) = "[" ++ (pprintType t) ++"]"
+pprintType (TyRule inh syn) = "(" ++ (concat $ intersperse "," $ map pprintType inh) ++ ") -> (" ++ (concat $ intersperse "," $ map pprintType syn) ++ ")" 
 
-data Value = VStr String
-           | VMap (M.Map String Value)
-           | VLan ApegGrm
-           | VPeg APeg
-           | VExp Expr
-           | Undefined
-           deriving Show
-
--- generators
-
-type InhSize = Int  -- number of generated inherited attributes  
-type SynSize = Int  -- number of generated synthesized attributes.
-type Depth   = Int
-
--- generator of types. 
-
-genType :: Depth -> InhSize -> SynSize -> Gen Type
-genType d n m
-  | d > 1 
-    = frequency
-      [
-        (10, return TyStr)
-      , (10, return TyAPeg)
-      , (10, TyMap <$> genType (d - 1) n m) 
-      , (50, TyRule <$> (replicateM n (genType (d - 1) n m)) <*>
-                        (replicateM m (genType (d - 1) n m)))
-      ]
-   | otherwise
-     = oneof [ return TyStr
-             , return TyAPeg ]
-
--- generating statically typed exprs
-
-type Gamma = M.Map String Type -- typing context
-
-genStrLit :: Gen String
-genStrLit = vectorOf 4 (suchThat (arbitrary :: Gen Char) isAlphaNum)
-
-genExpr :: Depth -> Gamma -> Type -> Gen Expr
-genExpr _ _ TyStr
-  = Str <$> vectorOf 4 (suchThat (arbitrary :: Gen Char) isAlphaNum)
-genExpr _ _ TyAPeg
-  = undefined
-
-
--- generating apegs
-
-genAPEG :: Depth -> Gen APeg
-genAPEG d
-  | d > 1     = undefined
-  | otherwise = undefined
 
 -- =================== AST Manipulation Utilities =================== --
                                          
@@ -141,7 +110,20 @@ grmExtRule (x@(ApegRule nt inh syn body):xs) nt' newAlt
 isMetaType :: Type -> Bool
 isMetaType TyMetaAPeg = True
 isMetaType (TyMetaExp) = True
+isMetaType (TyMetaType) = True
 isMetaType _   = False
+
+joinRules ::  ApegGrm -> ApegGrm -> ApegGrm
+joinRules g [] = g
+joinRules g (x:xs) = joinRules (grmAddRule g x) xs
+
+grmAddRule :: ApegGrm -> ApegRule -> ApegGrm
+grmAddRule [] r = [r]
+grmAddRule (x@(ApegRule nt inh syn body):xs) r@(ApegRule nt' inh' syn' body')
+    | (nt == nt') && (inh == inh') && (syn == syn') = ApegRule nt inh syn (mkAltBody body body'):xs
+    | (nt == nt') && ((inh /= inh') || (syn /= syn')) = error ("Conflicting definitions of " ++ nt ++ " when composing languages.")
+    | (nt /= nt') = x: grmAddRule xs r 
+
 -- =================== Show Utilities =================== --
 
 prec :: APeg -> Int
@@ -160,7 +142,7 @@ isPegAlt :: APeg -> Bool
 isPegAlt (Alt _ _) = True
 isPegAlt _       = False
 
-isPegSeq :: APeg -> Bool
+isPegSeq :: APeg -> Bool 
 isPegSeq (Seq _ _) = True
 isPegSeq _       = False
 

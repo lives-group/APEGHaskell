@@ -1,9 +1,13 @@
-module APEGInterp where
+module APEG.Interpreter.APEGInterp where
        
-import AbstractSyntax
-import APEGState
+import APEG.AbstractSyntax
+import APEG.Interpreter.MonadicState
+import APEG.Interpreter.State 
+import APEG.Interpreter.Value
+import APEG.Combinators
+import APEG.Interpreter.MaybeString
+--import APEG.Combinators
 import qualified Data.Map as M
-import APEGCombinators
 -- import Data.Either
 import Control.Monad.State.Lazy
 
@@ -17,40 +21,48 @@ bindPeg v p  = do prfx <- getStr
                   resetStr
                   interp p
                   res <- getStr
-                  modify (\(g,e,t,r,i,k) -> (g,e,t,prfx++r,i,k))
-                  varSet v (VStr res)
-                                    
+                  modify (prependPrefix prfx)
+                  varSet v (vstr $ fromMybStr res)
+                                     
 callNt :: String -> [Value] -> [Var] -> APegSt ()
 callNt nt vs@((VLan g):inh) vars
    = case fetch g nt of
             Just r  -> interpRule vs vars r 
-            Nothing -> fail ("Attempt to call non-existent rule: " ++ nt)
-callNt _ _ _ = fail "Panic !, Missing Language Attribute !" 
+            Nothing -> getTyEnv >>= \tyenv -> error ("Attempt to call non existent rule: " ++ nt ++ "\n\n" ++ (pprintTyEnv tyenv))
+callNt _ _ _ = error "Panic !, Missing language attribute !" 
 
 interpRule :: [Value] -> [Var] -> ApegRule -> APegSt ()
 interpRule vs os (ApegRule nt inh syn b) 
-     = do zs <- supresEnv (envFromDec inh vs) 
-                          (interp b >> 
+     = do zs <- overlapEnv (envFromDec inh vs) 
+                           (interp b >> 
                            onSucess (mapM (evalExp.snd) syn >>= \ws -> return $ zip os ws)
                                     (return []))
           varsSet zs
 
-ruleCreate :: String -> [(Type,Var)] -> [(Type,Value)] -> Value -> APegSt (Value)
-ruleCreate s inh syn b
-  | (all (valIsMExpr.snd) syn) && (valIsMPeg b) = return $ VLan [ApegRule s inh (map (\(a,b) -> (a,expFromVal b)) syn) (apegFromVal b)]
-  | otherwise = fail "Unproper attempt to create a new rule !"
+metaInhAttr2AST :: [(Value,Value)] -> [(Type,String)]
+metaInhAttr2AST = map (\(x,y) -> (typeFromVal x, strVal y))
+
+metaSynAttr2AST :: [(Value,Value)] -> [(Type,Expr)]
+metaSynAttr2AST = map (\(x,y) -> (typeFromVal x, expFromVal y))
+
+ruleCreate :: Value -> [(Value,Value)] -> [(Value,Value)] -> Value -> APegSt (Value)
+ruleCreate (VStr s) inh syn b
+  | (all (\(e,x) -> (valIsMExpr e) && (valIsMExpr x) ) syn) && (valIsMPeg b) = return $ VLan [ApegRule s (metaInhAttr2AST inh) (metaSynAttr2AST syn) (apegFromVal b)]
+  | otherwise = error "Unproper attempt to create a new rule: Rule parameters/returns incoccrectly constructed"
+ruleCreate _ inh syn b = error "Unproper attempt to create a new rule: Wrong rule name"
+
 
 dynRule :: Value -> Value -> Value -> APegSt Value
 dynRule (VLan grm) (VStr nt) (VPeg p) = return $ VLan (grmExtRule grm nt p)
-dynRule _ _ _ = fail "Unproper attempt to compose an existing rule !"
+dynRule _ _ _ = error "Unproper attempt to compose an existing rule !"
 
 
 -- =================== Monad Utilities =================== --
 
 
 lanUnion :: Value -> Value -> APegSt Value
-lanUnion (VLan l1) (VLan l2) = joinRules l1 l2 >>= return.VLan
-lanUnion _ _ = fail "Attempt to unite two values that aren't languages"
+lanUnion (VLan l1) (VLan l2) = return (VLan $ joinRules l1 l2 )
+lanUnion _ _ = error "Attempt to unite two values that aren't languages"
 
 
 unMeta :: MAPeg -> APegSt (APeg)
@@ -68,6 +80,29 @@ unMeta (MkAE xs)          = do ys <- mapM (\(ev,ee) -> do r <- evalExp ee
                                                           v <- evalExp ev
                                                           return (strVal v,expFromVal r)) xs
                                return $ AEAttr ys
+                               
+                               
+unMetaExp :: MExpr -> APegSt (Expr)
+unMetaExp MEpsilon         = return $ Epsilon
+unMetaExp (MVar e)         = evalExp e >>= return.(EVar).strVal
+unMetaExp (MStr e)         = evalExp e >>= return.(Str).strVal 
+unMetaExp (MUnion e1 e2)   = do ue1 <- evalExp e1
+                                ue2 <- evalExp e2
+                                return (Union (expFromVal ue1) (expFromVal ue2))
+unMetaExp (MMapLit xs)     = do ys <- mapM (\(mk,mv) -> evalExp mk >>= \k -> evalExp mv >>= \v -> return (expFromVal k,expFromVal v)) xs
+                                return (MapLit ys)
+unMetaExp (MMapIns e1 e2 e3) = do ue1 <- evalExp e1 
+                                  ue2 <- evalExp e2
+                                  ue3 <- evalExp e3
+                                  return (MapIns (expFromVal ue1)  (expFromVal ue2)  (expFromVal ue3))
+unMetaExp (MMapAcces e1 e2)  = do ue1 <- evalExp e1 
+                                  ue2 <- evalExp e2
+                                  return (MapAccess (expFromVal ue1)  (expFromVal ue2))
+unMetaExp m@(MkTyMap e)     = return $ MetaExp m
+unMetaExp MkTyStr           = return $ MetaExp MkTyStr
+unMetaExp MkTyLanguage      = return $ MetaExp MkTyLanguage
+
+
 
 mapInsert :: Value -> String -> Value -> APegSt (Value)
 mapInsert (VMap m) s v = return $ VMap (M.insert s v m)
@@ -91,17 +126,21 @@ evalExp (ExtRule lam ntexp mapeg) =  do grm <- evalExp lam
                                         dynRule grm nt apeg 
                                         
 evalExp (MkRule nt inh syn b) = do ntName <- evalExp nt
-                                   xs <- mapM (evalExp.snd) syn
+                                   inh' <- mapM (\(vn,ex) -> evalExp vn >>= \vvn -> evalExp ex >>= \vvex -> return (vvn,vvex) ) inh
+                                   syn' <- mapM (\(vn,ex) -> evalExp vn >>= \vvn -> evalExp ex >>= \vvex -> return (vvn,vvex) ) syn
                                    apeg <- evalExp b
-                                   ruleCreate (strVal ntName) inh (zip (map fst syn) xs) apeg 
+                                   ruleCreate ntName inh' syn' apeg 
 evalExp (Union e1 e2) = do l1 <- evalExp e1
                            l2 <- evalExp e2
                            lanUnion l1 l2                         
 evalExp (MetaPeg m) = unMeta m >>=  return.VPeg
-evalExp (MetaExp m) = return $ VExp m
-evalExp (MpLit xs)  = (mapM (\(s,b) -> do vs <- evalExp s 
-                                          vr <- evalExp b 
-                                          return (strVal vs,vr)) xs) >>= (\xs -> return $ VMap (M.fromList xs))
+evalExp (MetaExp MkTyStr) = return $ vtype TyStr  
+evalExp (MetaExp MkTyLanguage) = return $ vtype TyLanguage 
+evalExp (MetaExp (MkTyMap mt)) = evalExp mt >>= return.vtype.(TyMap).typeFromVal 
+evalExp (MetaExp m) = unMetaExp m >>= (return.vexpr)
+evalExp (MapLit xs)  = (mapM (\(s,b) -> do vs <- evalExp s 
+                                           vr <- evalExp b 
+                                           return (strVal vs,vr)) xs) >>= (\xs -> return $ VMap (M.fromList xs))
 evalExp (MapIns m s v)  = do mp  <- evalExp m
                              key <- evalExp s
                              val <- evalExp v
@@ -109,6 +148,7 @@ evalExp (MapIns m s v)  = do mp  <- evalExp m
 evalExp (MapAccess m i) = do mp  <- evalExp m
                              str <- evalExp i
                              mapAcces mp str
+                             
 
 interp :: APeg -> APegSt ()
 interp (Lambda)       =  done
@@ -122,26 +162,26 @@ interp (Not e)        = notPeg (interp e)
 interp (AEAttr xs)    = mapM_ bind xs
 interp (Bind v p)     = bindPeg v p
 
-                                             
+                                           
 interpGrammar :: [(Var,Value)] -> ApegGrm -> APegSt ()
 interpGrammar vs [] = return ()
 interpGrammar vs grm@((ApegRule nt _ syn b):_) 
        = do envAlter (\_ -> M.fromList (f vs))
             interp b
             onSucess (mapM (evalExp.snd) syn >>= \ws -> varsSet (outs ws))
-                     (get >>= \st@(grm,env,tyenv,reckon,inp,r) -> 
-                               fail ("Rule " ++ nt ++ " has failed. Remaining input \"" ++ (take 30 inp) ++ "\".\n" ++ (show st)))
+                     (get >>= \pst -> 
+                               error ("Rule " ++ nt ++ " has failed. Remaining input \"" ++ (take 30 (remInp pst)) ++ "\".\n" ++ (show pst)))
                                                                             
     where outs l = zip [ "_varOut" ++ (show i) | i <- [1..length syn] ] l
           f [] = [("g",VLan grm)]
           f xs@((_,VLan _):_) = xs
           f xs = ("g",VLan grm):xs
 
-testGrammarWithArgs :: ApegGrm -> [(Var,Value)] -> String -> ApegTuple
+testGrammarWithArgs :: ApegGrm -> [(Var,Value)] -> String -> PureState
 testGrammarWithArgs g vs s = snd $ runState (interpGrammar vs g) (zeroSt g s)
     
-simpleTestWithArgs :: ApegGrm -> [(Var,Value)] -> String -> SmallTuple
+simpleTestWithArgs :: ApegGrm -> [(Var,Value)] -> String -> (VEnv,MybStr,String,Result)
 simpleTestWithArgs g vs s = sel $ runState (interpGrammar vs g) (zeroSt g s)
-    where sel (_,(g,e,t,r,i,k)) = (rmG e,r,i,k)
-          rmG = M.delete "g"
-    
+    where sel (_,s) = (rmG (valEnv s),getPrefix s,remInp s,getResult s)
+          rmG = M.delete "g" 
+     

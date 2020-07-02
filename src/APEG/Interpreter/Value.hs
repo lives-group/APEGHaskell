@@ -20,13 +20,13 @@ module APEG.Interpreter.Value(
     varNameFromVal,
     apegFromVal,
     vlan,
+    vgrm,
     vtype,
     vstr,
     strVal,
     vapeg,
+    hintStr,
     vexpr
-    
-          
 ) where
 
 import APEG.AbstractSyntax
@@ -39,6 +39,7 @@ data Value = VStr String
            | VBool Bool
            | VMap (M.Map String Value)
            | VLan ApegGrm
+           | VGrm ApegGrm
            | VPeg APeg
            | VExp Expr
            | VType Type
@@ -46,13 +47,29 @@ data Value = VStr String
            deriving Show
 
 
+hintStr :: Value -> String
+hintStr (VStr _) = "VStr"
+hintStr (VInt _) = "VInt"
+hintStr (VBool _) = "VBool"
+hintStr (VMap _) = "VMap"
+hintStr (VLan _) = "VLan"
+hintStr (VGrm _) = "VGrm"
+hintStr (VPeg _) = "VPeg"
+hintStr (VExp _) = "VExp"
+hintStr (VType _) = "VType"
+hintStr (Undefined) = "Undefined"
+
 -- | Construct an string from a value
 vstr :: String -> Value
 vstr = VStr
 
--- | Construct a value from a Grammar.
+-- | Construct a language value from a Grammar.
 vlan :: ApegGrm -> Value
 vlan = VLan
+
+-- | Construct a grammar value from a Grammar.
+vgrm :: ApegGrm -> Value
+vgrm = VGrm
 
 -- | construct a value from an APeg expression
 vapeg :: APeg -> Value

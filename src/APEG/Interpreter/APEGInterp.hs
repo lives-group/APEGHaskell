@@ -5,11 +5,12 @@ import APEG.Interpreter.MonadicState
 import APEG.Interpreter.State 
 import APEG.Interpreter.Value
 import APEG.Combinators
+import APEG.TypeSystem
 import APEG.Interpreter.MaybeString
---import APEG.Combinators
 import qualified Data.Map as M
--- import Data.Either
 import Control.Monad.State.Lazy
+
+import Debug.Trace
 
 
 bind :: (Var, Expr) -> APegSt ()
@@ -47,24 +48,29 @@ metaSynAttr2AST = map (\(x,y) -> (typeFromVal x, expFromVal y))
 
 ruleCreate :: Value -> [(Value,Value)] -> [(Value,Value)] -> Value -> APegSt (Value)
 ruleCreate (VStr s) inh syn b
-  | (all (\(e,x) -> (valIsMExpr e) && (valIsMExpr x) ) syn) && (valIsMPeg b) = return $ VLan [ApegRule s (metaInhAttr2AST inh) (metaSynAttr2AST syn) (apegFromVal b)]
+  | (all (\(e,x) -> (valIsMExpr e) && (valIsMExpr x) ) syn) && (valIsMPeg b) = return $ VGrm [ApegRule s (metaInhAttr2AST inh) (metaSynAttr2AST syn) (apegFromVal b)]
   | otherwise = error "Unproper attempt to create a new rule: Rule parameters/returns incoccrectly constructed"
 ruleCreate _ inh syn b = error "Unproper attempt to create a new rule: Wrong rule name"
 
 
 dynRule :: Value -> Value -> Value -> APegSt Value
-dynRule (VLan grm) (VStr nt) (VPeg p) = return $ VLan (grmExtRule grm nt p)
+dynRule (VLan grm) (VStr nt) (VPeg p) = return $ VGrm (grmExtRule grm nt p)
 dynRule _ _ _ = error "Unproper attempt to compose an existing rule !"
 
 
 -- =================== Monad Utilities =================== --
 
 
-lanUnion :: Value -> Value -> APegSt Value
-lanUnion (VLan l1) (VLan l2) = return (VLan $ joinRules l1 l2 )
-lanUnion _ _ = error "Attempt to unite two values that aren't languages"
+lanUnion ::Value -> Value -> APegSt Value
+--lanUnion (VLan l1) (VLan l2) = return (VLan $ joinRules l1 l2 )
+lanUnion (VLan l1) (VGrm l2) = do xs <- typeGrammar l2
+                                  case xs of
+                                       []    -> return (VLan $ joinRules l1 l2 )
+                                       (_:_) -> error ("Dynamic type error while type gramar extension. Type errors follow\n " ++ (unlines xs)) 
+lanUnion (VGrm l1) (VGrm l2) = return (VGrm $ joinRules l1 l2 )
+lanUnion _ _ = remStr >>= \s -> error ("Attempt to unite two values that aren't languages. Remaining input:\n" ++ s)
 
-
+-- Unquote !
 unMeta :: MAPeg -> APegSt (APeg)
 unMeta MkLambda           = return $ Lambda
 unMeta (MkLit e)          = evalExp e >>= return.(Lit).strVal
@@ -80,7 +86,6 @@ unMeta (MkAE xs)          = do ys <- mapM (\(ev,ee) -> do r <- evalExp ee
                                                           v <- evalExp ev
                                                           return (strVal v,expFromVal r)) xs
                                return $ AEAttr ys
-                               
                                
 unMetaExp :: MExpr -> APegSt (Expr)
 unMetaExp MEpsilon         = return $ Epsilon
@@ -106,18 +111,18 @@ unMetaExp MkTyLanguage      = return $ MetaExp MkTyLanguage
 
 mapInsert :: Value -> String -> Value -> APegSt (Value)
 mapInsert (VMap m) s v = return $ VMap (M.insert s v m)
-mapinsert v _ _        = fail (" value: " ++ (show v) ++ " is not a map.") 
+mapInsert v _ _        = error (" value: " ++ (show v) ++ " is not a map.") 
 
 mapAcces :: Value -> Value -> APegSt (Value)
 mapAcces (VMap m) (VStr s) = case (m M.!? s) of
                                  Just r -> return r
                                  Nothing -> return Undefined
                                  
-mapAccess m      (VStr _)  = fail (" value: " ++ (show m) ++ " is not a map.") 
-mapAccess m  x  = fail (" value: " ++ (show x) ++ " is not a string.") 
+mapAccess m      (VStr _)  = pfailMsg (" value: " ++ (show m) ++ " is not a map.") 
+mapAccess m  x  = pfailMsg (" value: " ++ (show x) ++ " is not a string.") 
 
 evalExp :: Expr -> APegSt (Value)
-evalExp (Epsilon) = return (VLan [])
+evalExp (Epsilon) = return (VGrm [])
 evalExp (Str s) = return (VStr s)
 evalExp (EVar v)   = var v
 evalExp (ExtRule lam ntexp mapeg) =  do grm <- evalExp lam
@@ -132,7 +137,7 @@ evalExp (MkRule nt inh syn b) = do ntName <- evalExp nt
                                    ruleCreate ntName inh' syn' apeg 
 evalExp (Union e1 e2) = do l1 <- evalExp e1
                            l2 <- evalExp e2
-                           lanUnion l1 l2                         
+                           lanUnion l1 l2
 evalExp (MetaPeg m) = unMeta m >>=  return.VPeg
 evalExp (MetaExp MkTyStr) = return $ vtype TyStr  
 evalExp (MetaExp MkTyLanguage) = return $ vtype TyLanguage 
@@ -144,7 +149,7 @@ evalExp (MapLit xs)  = (mapM (\(s,b) -> do vs <- evalExp s
 evalExp (MapIns m s v)  = do mp  <- evalExp m
                              key <- evalExp s
                              val <- evalExp v
-                             mapInsert mp (varNameFromVal key) val
+                             mapInsert mp (strVal key) val
 evalExp (MapAccess m i) = do mp  <- evalExp m
                              str <- evalExp i
                              mapAcces mp str

@@ -9,6 +9,11 @@ import APEG.AbstractSyntax
 import APEG.Interpreter.State
 import APEG.TypeSystem
 
+{-  DSL for representing the grammar
+       rebindable syntaxe
+       Special mkar to eliminate our up some nonTerminals
+-}
+
 alts :: [APeg] -> APeg
 alts  = foldl1 Alt
 

@@ -25,6 +25,7 @@ module APEG.Interpreter.State(
     rErr,
     assureOkStatus,
     remInp,
+    remInpM,
     setResult,
     accPrefix,
     getPrefix,
@@ -157,6 +158,10 @@ resetPrefix (PureState (e,t,_,inp,r)) = PureState (e,t,emptyMybStr,inp,r)
 remInp :: PureState -> String
 remInp (PureState (_,_,_,inp,_)) = inp 
 
+
+-- | Returns the remaining input of the state, with the maximum of n characters.
+remInpM :: Int -> PureState -> String
+remInpM n (PureState (_,_,_,inp,_)) = roundInput n inp 
 
 splitPrefix :: String -> String -> (String,String)
 splitPrefix xs ys = test (splitAt (length xs) ys)

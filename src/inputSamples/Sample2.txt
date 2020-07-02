@@ -1,5 +1,5 @@
 define sfor {
-   stmt -> whites "for" whites expr whites "to" whites expr whites block;   
+   stmt2 -> whites "for" whites expr whites "to" whites expr whites block;   
 }
 syntax sfor {
    j := 0;

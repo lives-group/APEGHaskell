@@ -145,8 +145,8 @@ inferTypeExpr nt (EVar s) = varTypeOn nt s >>= maybe (return $ tyFail ("Undeclar
 inferTypeExpr nt (Union e d) = do  t1 <- inferTypeExpr nt e
                                    t2 <- inferTypeExpr nt d
                                    case (t1,t2) of
-                                             (Right TyLanguage,Right TyGrammar) -> return $ pure TyLanguage
-                                             (Right TyGrammar,Right TyGrammar) -> return $ pure TyGrammar
+                                             (Right TyLanguage, Right TyGrammar) -> return $ pure TyLanguage
+                                             (Right TyGrammar , Right TyGrammar) -> return $ pure TyGrammar
                                              _  -> return $ tyFail ("Illegal union of " ++ (show e) ++ (show d))
 inferTypeExpr nt (MapLit []) = return $ tyFail (" Untypeable map literal at rule " ++ nt) 
 inferTypeExpr nt (MapLit xs) = do ts <- mapM ((inferTypeExpr nt).snd) xs

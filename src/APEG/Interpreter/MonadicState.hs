@@ -63,7 +63,7 @@ getLanguage = get >>= return.language
 -- of g'will be appended at the grammar g
 langExt :: ApegGrm -> APegSt ()
 langExt grm 
-     =  modify (\pst -> upValEnv (M.update (\oldg -> Just $ vlan (joinRules (language pst) grm)) "g") pst)
+     =  modify (\pst -> upValEnv (M.update (\oldg -> Just $ vgrm (joinRules (language pst) grm)) "g") pst)
 
      
 -- | Access the value of a variabel. If variable's name is undefined, the result will be an runtime error.
@@ -170,6 +170,12 @@ tyRuleEnvSwap nt newEnv = do r <- ruleEnv nt
 -- it began to be recorded.
 getStr :: APegSt (MybStr) 
 getStr =  get >>= return.getPrefix
+
+
+-- | Returns the remaining input, with a maximum of 160 caracters.
+-- it began to be recorded.
+remStr :: APegSt (String) 
+remStr =  get >>= return.(remInpM 160)
 
 
 -- | Resets the accumator of accepted input to the empty string.  

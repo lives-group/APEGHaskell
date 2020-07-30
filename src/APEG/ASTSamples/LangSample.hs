@@ -1,4 +1,4 @@
-module APEG.ASTSamples.LangSample where
+ module APEG.ASTSamples.LangSample where
 
 import APEG.Interpreter.APEGInterp
 import APEG.Interpreter.MonadicState
@@ -58,15 +58,15 @@ r3ex1 = Seq (Not (Lit "ad"))
 
             --  {y = "Yka";} !'ad'  b c { x = "ba"; } / { y = "nah"; } '010' '101' { x = "neh"; }
 r4ex1 :: APeg
-r4ex1 = Alt (Seq (AEAttr [("y",Str "Yka")] )
+r4ex1 = Alt (Seq (Update [("y",Str "Yka")] )
                  (Seq (Not (Lit "ad")) 
                       (Seq (Lit "b")
                            (Seq (Lit "c")
-                                (AEAttr [("x",Str "ba")]) ))))   
-            (Seq (AEAttr [("y",Str "nah")])
+                                (Update [("x",Str "ba")]) ))))   
+            (Seq (Update [("y",Str "nah")])
                  (Seq (Lit "010")
                       (Seq (Lit "101")
-                           (AEAttr [("x",Str "neh")] ))))
+                           (Update [("x",Str "neh")] ))))
                            
 --  ================= EXAMPLE 2 =================
 -- Creating a Simple Grammar: 
@@ -79,6 +79,7 @@ runGrmEx1 s = simpleTestWithArgs ex2 [] s
 
 ex2 :: ApegGrm
 ex2 = [r1ex2]
+-- S<g> : 'a'S<g> 'b' / '.';
 
 r1ex2 :: ApegRule
 r1ex2 = ApegRule "S" 
@@ -92,8 +93,8 @@ r1ex2 = ApegRule "S"
 --  ================= EXAMPLE 3 =================
 -- Using Bind : 
 -- 
--- S[Lan g] returns [String out] -> out = VAR 
---                                / out = NUM
+-- S[Lan g] returns [out] -> out = VAR 
+--                         / out = NUM
 -- NUM[Lan g] -> (0 \ 1) (0 \ 1)*
 -- VAR[Lan g] -> ('A' \ 'B') ('A' \ 'B')*
 
@@ -139,12 +140,12 @@ ruleExt :: ApegRule
 ruleExt = ApegRule "ext"
                     [(TyLanguage,"g")]
                     [(TyLanguage, EVar "si")]
-                    (alts [seqs [Lit ".", AEAttr [("si",mr1)]],
-                           seqs [Lit ",", AEAttr [("si",MkRule (MetaExp $ MStr (Str "fator")) 
+                    (alts [seqs [Lit ".", Update [("si",mr1)]],
+                           seqs [Lit ",", Update [("si",MkRule (MetaExp $ MStr (Str "fator")) 
                                                                [(MetaExp MkTyLanguage,MetaExp $ MVar (Str "g"))] 
                                                                [] 
                                                                (MetaPeg metaAB)) ]],
-                           seqs [Lambda, AEAttr [("si",Epsilon)]]
+                           seqs [Lambda, Update [("si",Epsilon)]]
                            ])
                     
 ruleFator :: ApegRule 

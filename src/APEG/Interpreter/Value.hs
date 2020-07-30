@@ -1,9 +1,7 @@
 {-|
 Module      : APEG.Interpreter.Value
 Description : Value definition and utility functions.
-Copyright   : (c) Leonardo Vieira dos Santos Reis, 2018
-                  Rodrigo Geraldo Ribeiro, 2018
-                  Elton M. Cardoso, 2018
+Copyright   : 
 License     : GPL-3
 Stability   : experimental
 Portability : POSIX
@@ -20,17 +18,20 @@ module APEG.Interpreter.Value(
     varNameFromVal,
     apegFromVal,
     vlan,
-    vgrm,
     vtype,
     vstr,
     strVal,
+    intVal,
     vapeg,
-    hintStr,
     vexpr
+    
+          
 ) where
 
 import APEG.AbstractSyntax
 import qualified Data.Map as M
+import Debug.Trace
+import APEG.Interpreter.TypeEnvironment
 import Debug.Trace
 
 data Value = VStr String
@@ -38,7 +39,7 @@ data Value = VStr String
            | VFloar Float
            | VBool Bool
            | VMap (M.Map String Value)
-           | VLan ApegGrm
+           | VLan ApegGrm TyEnv
            | VGrm ApegGrm
            | VPeg APeg
            | VExp Expr
@@ -47,33 +48,22 @@ data Value = VStr String
            deriving Show
 
 
-hintStr :: Value -> String
-hintStr (VStr _) = "VStr"
-hintStr (VInt _) = "VInt"
-hintStr (VBool _) = "VBool"
-hintStr (VMap _) = "VMap"
-hintStr (VLan _) = "VLan"
-hintStr (VGrm _) = "VGrm"
-hintStr (VPeg _) = "VPeg"
-hintStr (VExp _) = "VExp"
-hintStr (VType _) = "VType"
-hintStr (Undefined) = "Undefined"
-
 -- | Construct an string from a value
 vstr :: String -> Value
 vstr = VStr
 
 -- | Construct a language value from a Grammar.
-vlan :: ApegGrm -> Value
-vlan = VLan
+vlan :: TyEnv -> ApegGrm -> Value
+vlan ty gr = VLan gr ty 
 
--- | Construct a grammar value from a Grammar.
+-- | Construct a value from a Grammar.
 vgrm :: ApegGrm -> Value
 vgrm = VGrm
 
 -- | construct a value from an APeg expression
 vapeg :: APeg -> Value
 vapeg = VPeg
+
 
 -- | Construct a value from an expression
 vexpr :: Expr -> Value
@@ -99,9 +89,17 @@ valIsMPeg _        = False
 strVal :: Value -> String
 strVal (VStr s) = s
 
+intVal :: Value -> Int
+intVal (VInt i) = i
+
+-- | Return the Ggrammar value of a value.
+grmFromVal :: Value -> ApegGrm
+grmFromVal (VGrm s) = s
+
 -- | Retrive the actual expression represented by  the value. If the value does not contain an expression, it will result in an error. 
 expFromVal :: Value -> Expr
 expFromVal (VExp e) = e
+expFromVal x =  error ("expFromVal Unknow value: " ++ show x) 
 
 -- | Retrive the actual type represented by the value. If the value does not contain a type, it will result in an error. 
 typeFromVal :: Value -> Type

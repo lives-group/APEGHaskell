@@ -44,6 +44,7 @@ module APEG.Interpreter.State(
     upTyEnv,
     withResult,
     tyEnvFromRule,
+    tyEnvFromGrm,
     zeroSt,
     pprintTyEnv,    
     ppRintTyRuleEnv,
@@ -94,7 +95,6 @@ language (PureState (ve,te,rec,inp,res)) = case ve M.!?  "g" of
                                                 Just (VLan grm ty) -> (grm, ty)
                                                 Just ( _ )     -> error "Unexpected value for language attribute 'g' "
                                                 Nothing        -> error "Undefined value for language attribute 'g'"
-
 
 getResult :: PureState -> Result
 getResult (PureState (_,_,_,_,r)) = r
@@ -237,6 +237,8 @@ ruleEntry (ApegRule nt inh syn _ ) = (nt,(TyRule (map fst inh) (map fst syn),M.f
 tyEnvFromRule :: ApegRule -> TyEnv
 tyEnvFromRule r = M.fromList [ruleEntry r]
 
+tyEnvFromGrm :: ApegGrm -> TyEnv
+tyEnvFromGrm g = M.fromList (map ruleEntry g)
 
 -- | Simplified version of show that only prints the input and recognized input aspects of the state.          
 quickShow :: PureState -> String

@@ -119,6 +119,9 @@ tRule xs ys = TyRule xs ys
 (.::) x t = (t,x)
 infixr 7 .::
 
+ins :: Expr -> Expr -> Expr -> Expr 
+ins x y z = MapIns x y z
+
 mapvals :: [(Expr,Expr)] -> Expr
 mapvals xs = MapLit xs
 

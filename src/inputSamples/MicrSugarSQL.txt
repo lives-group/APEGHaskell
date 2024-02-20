@@ -1,0 +1,16 @@
+define query {
+   stmt      -> whites identifier whites "<--?" whites SQLexp whites ";";
+   SQLexp    -> "SELECT" whites1 fieldList whites1
+                "FROM" whites1 identifier (whites "," whites1 identifier)*
+                  ((whites1 "WHERE" whites1 condition) / $);
+   fieldList -> field (whites "," whites field)* / "*";
+   field     -> identifier (("." identifier) / $);
+   condition -> SQLCond  (whites1 "AND" whites1 SQLCond)*;
+   SQLCond   -> field whites OP whites identifier;
+   OP        -> "==" / "!=" / "<" / ">";
+}
+syntax query {
+   x <--?  SELECT * FROM table;
+   y <--?  SELECT phonebook.addres FROM phonebook WHERE phonebook.name == jhon;
+}
+

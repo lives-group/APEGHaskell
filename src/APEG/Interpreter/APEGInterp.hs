@@ -71,6 +71,7 @@ langExt grm
 composeLang :: (ApegGrm,TyEnv) -> ApegGrm -> APegSt (ApegGrm, TyEnv)
 composeLang (g,t) g' = do st <- get
                           grm' <- return $ joinRules g g'
+                          tyEnvAlter (\ _ -> tyEnvFromGrm grm')
                           --trace (show grm') (return ())
                           errs <- typeGrammar grm'
                           t' <- getTyEnv

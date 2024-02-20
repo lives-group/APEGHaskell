@@ -85,7 +85,8 @@ data Type = TyStr
           | TyLanguage -- This type is to be attributed to Grammar whose all rules are correct.          
           deriving (Show, Eq)
 
-          
+-- =================== AST String Convertion =================== --
+
 pprintType :: Type -> String
 pprintType TyStr  = "Str"
 pprintType TyInt  = "Int"
@@ -97,6 +98,20 @@ pprintType TyMetaType = "#Type"
 pprintType TyLanguage = "Lang"
 pprintType (TyMap t) = "[" ++ (pprintType t) ++"]"
 pprintType (TyRule inh syn) = "(" ++ (concat $ intersperse "," $ map pprintType inh) ++ ") -> (" ++ (concat $ intersperse "," $ map pprintType syn) ++ ")" 
+
+
+pprintApeg :: APeg -> String
+pprintApeg Lambda = "Eps"
+pprintApeg (Lit s) = "\"s\""
+pprintApeg (NT s args vrs) = s ++ "<???>"
+--Kle APeg
+--Not APeg
+--Seq APeg APeg
+--Alt APeg APeg
+--Update [(Var,Expr)]
+--Constr Expr APeg
+--Bind Var APeg
+
 
 
 -- =================== AST Manipulation Utilities =================== --

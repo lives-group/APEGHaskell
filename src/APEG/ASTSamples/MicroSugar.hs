@@ -1,5 +1,8 @@
-module APEG.ASTSamples.MicroSugar where
 
+module APEG.ASTSamples.MicroSugar where
+{-# LANGUAGE OverloadedStrings #-} 
+
+import Data.List
 import APEG.Interpreter.APEGInterp
 import APEG.Interpreter.MonadicState
 import APEG.Interpreter.MaybeString
@@ -9,6 +12,8 @@ import APEG.AbstractSyntax
 import APEG.Interpreter.State
 import APEG.TypeSystem
 import APEG.PlayGround
+import Data.String
+
 
 alts :: [APeg] -> APeg
 alts  = foldl1 Alt
@@ -35,7 +40,7 @@ lower :: APeg
 lower = chrs ['a'..'z']
 
 lit :: APeg
-lit = Kle $ chrs "()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}"
+lit = Kle $ chrs "()*+,-./0123456789:;<=>!?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}"
 
 identifier :: APeg
 identifier = Seq lower (Kle (Alt lower digit ))
@@ -64,8 +69,19 @@ g = EVar "g"
 -- ========== MicroSugar APEG Grammar ============= --
 
 
+sig :: ApegRule -> (String,[(Type, Var)],[(Type,Expr)])
+sig ( ApegRule n xs ys _) = (n,xs,ys)
+
+signatures :: ApegGrm -> [(String,[(Type, Var)],[(Type,Expr)])]
+signatures = map sig
+
+sig2str :: (String,[(Type, Var)],[(Type,Expr)]) -> String
+sig2str (s, xs, ys) = s ++ " : " ++
+                      (concat $ intersperse "," $ map (pprintType.fst) xs) ++ " -> " ++
+                      (concat $ intersperse "," $ map (pprintType.fst) ys)
+
 microSugar :: ApegGrm
-microSugar = [ruleProg,ruleNewSyn,ruleRule,rulePattern,ruleSeq,ruleExtStmt,ruleKFator,rulepFator,ruleExpr,ruleBlock,ruleStmt,ruleCExpr,ruleFator,whiteRule]
+microSugar = [ruleProg,ruleNewSyn,ruleRule,rulePattern,ruleSeq,ruleExtStmt,ruleKFator,rulepFator,ruleExpr,ruleBlock,ruleStmt,ruleCExpr,ruleFator,ruleID,whiteRule,whiteRule1]
 
 
 ruleProg :: ApegRule
@@ -161,7 +177,9 @@ rulepFator = ApegRule "pFator"
                                    whts,
                                    Lit ")"],
                             seqs [Bind "ntName" rid,
-                                  Update[("pf",MetaPeg $ MkCal (EVar "ntName") [MetaExp (MVar $ Str "g")] [])] ]
+                                  Update[("pf",MetaPeg $ MkCal (EVar "ntName") [MetaExp (MVar $ Str "g")] [])]],
+                            seqs [Lit "$",
+                                  Update[("pf",MetaPeg $ MkLambda)]]
                                    
                            ])
 
@@ -201,7 +219,7 @@ ruleStmt = ApegRule "stmt"
                      [(TyLanguage,"g")]
                      []
                      ( Seq whts
-                           (alts [seqs [Lit "print(", NT "expr" [g] [], whts, Lit ")", whts, (Lit ";")],
+                           (alts [seqs [Lit "print(", whts, NT "expr" [g] [], whts, Lit ")", whts, (Lit ";")],
                                   seqs [Lit "read(", whts, identifier , whts, Lit ")", whts, (Lit ";")],
                                   seqs [Lit "if(", NT "cexpr" [g] [] ,whts,Lit ")", whts ,NT "block" [g] []],
                                   seqs [Lit "loop(", NT "cexpr" [g] [] ,whts, Lit ")", whts ,NT "block" [g] []],
@@ -230,13 +248,24 @@ ruleFator = ApegRule "fator"
                              num,
                              identifier
                            ])
+ruleID :: ApegRule
+ruleID = ApegRule "identifier"
+                     [(TyLanguage,"g")]
+                     []
+                     identifier
                            
 whiteRule :: ApegRule 
 whiteRule = ApegRule "whites"
                      [(TyLanguage, "g")]
                      []
                      (whts)
-                           
+
+
+whiteRule1 :: ApegRule
+whiteRule1 = ApegRule "whites1"
+                     [(TyLanguage, "g")]
+                     []
+                     (whts1)
                            
 runMS :: FilePath -> IO ()
 runMS =  runFile (runGrammar microSugar []) 
@@ -247,4 +276,7 @@ acceptMS = runFile (runAccept  microSugar [])
 debugMS :: String -> IO ()
 debugMS = runFile (debugRun  microSugar [])
               
+
+msListRules :: IO ()
+msListRules = mapM_ (putStrLn.sig2str) (signatures microSugar)
 

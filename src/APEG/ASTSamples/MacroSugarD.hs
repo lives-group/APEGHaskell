@@ -26,7 +26,7 @@ fator = num ./. identifier
 microSugar :: ApegGrm
 microSugar = [ruleProg,ruleNewSyn,ruleRule,rulePattern,ruleSeq,ruleExtStmt,
               ruleKFator,rulepFator,ruleExpr,ruleBlock,ruleStmt,ruleCExpr,
-              ruleFator,whiteRule]
+              ruleFator,ruleIndentifier,whiteRule]
 
               
 ruleProg :: ApegRule
@@ -74,7 +74,6 @@ ruleKFator
              (lam     .:. "pf" .<. v "kf") )
         )
          
-
 rulepFator :: ApegRule
 rulepFator 
  = rule "pFator" ["g" .:: tLang] [v "pf" .:: tMAPeg]
@@ -142,6 +141,12 @@ ruleFator
          (lit "false") ./.
          num ./.
          identifier)
+
+
+ruleIndentifier :: ApegRule
+ruleIndentifier
+ = rule "identifier" ["g" .:: tLang,  "sigma" .:: tMap tGrm] []
+         identifier
 
 
 whiteRule :: ApegRule 

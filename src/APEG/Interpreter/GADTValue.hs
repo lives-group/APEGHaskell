@@ -8,22 +8,22 @@ Portability : POSIX
 
 This module contains the definition of values as weel as predicates and utility functions for values manipulation.
 -}
-
-module APEG.Interpreter.Value(
+{-# LANGUAGE GADTs #-}
+module APEG.Interpreter.GADTValue(
     Value(..),
-    valIsMExpr,
-    valIsMPeg,
-    expFromVal,
-    typeFromVal,
-    varNameFromVal,
-    apegFromVal,
-    vlan,
-    vtype,
-    vstr,
-    strVal,
-    intVal,
-    vapeg,
-    vexpr
+--     valIsMExpr,
+--     valIsMPeg,
+--     expFromVal,
+--     typeFromVal,
+--     varNameFromVal,
+--     apegFromVal,
+--     vlan,
+--     vtype,
+--     vstr,
+--     strVal,
+--     intVal,
+--     vapeg,
+--     vexpr
     
           
 ) where
@@ -34,20 +34,23 @@ import Debug.Trace
 import APEG.Interpreter.TypeEnvironment
 import Debug.Trace
 
-data Value = VStr String
-           | VInt Int 
-           | VFloar Float
-           | VBool Bool
-           | VMap (M.Map String Value)
-           | VLan ApegGrm TyEnv
-           | VGrm ApegGrm
-           | VPeg APeg
-           | VExp Expr
-           | VType Type
-           | Undefined
-           deriving Show
+data Value a where 
+    VStr :: String -> Value String
+    VInt :: Int -> Value Int 
+    VFloar :: Float -> Value Float
+    VBool :: Bool -> Value Bool
+    VMap :: (M.Map String Value) ->  Value (M.Map String Value)
+    VLan :: ApegGrm -> TyEnv ->  Value ApegGrm
+    VGrm :: ApegGrm -> Value ApegGrm
+    VPeg :: APeg  -> Value APeg
+    VExp :: Expr -> Value Expr
+    VType :: Type -> Value Type
+    Undefined :: Expr a
+   --        deriving Show
 
-
+{-
+           
+           
 -- | Construct an string from a value
 vstr :: String -> Value
 vstr = VStr
@@ -111,4 +114,4 @@ varNameFromVal (VExp (Str s)) = s
 
 -- | Retrives the APEG expression of a variable. If the value does not contain an APEG expression it will result in a error. 
 apegFromVal :: Value -> APeg
-apegFromVal (VPeg e) = e
+apegFromVal (VPeg e) = e-}

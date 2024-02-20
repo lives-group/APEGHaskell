@@ -1,9 +1,7 @@
 {-|
 Module      : APEG.Interpreter.MaybeString
 Description : Representation of a state for the APEG interpreter/type-checker
-Copyright   : (c) Leonardo Vieira dos Santos Reis, 2018
-                  Rodrigo Geraldo Ribeiro, 2018
-                  Elton M. Cardoso, 2018
+Copyright   : 
 License     : GPL-3
 Stability   : experimental
 Portability : POSIX

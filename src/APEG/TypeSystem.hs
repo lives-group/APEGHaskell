@@ -73,9 +73,10 @@ validateRuleExt  l s m =   coalesceErr [(s1 >|< l),  (s2 >|< s), (s3 >|< m), tyF
 
 validateRuleCreate :: TYResult -> [(TYResult,TYResult)] -> [TYResult] -> TYResult -> TYResult
 validateRuleCreate (Right TyStr) xs rs (Right TyMetaAPeg) 
-   | (all (== (Right TyMetaType, Right TyStr)) xs) && (all isMetaType (tyr2list rs)) =Right TyGrammar  --Right (TyRule (tyr2list $ map fst xs) (tyr2list rs))
+   | (all (== (Right TyMetaType, Right TyStr)) xs) && (all isMetaType (tyr2list rs)) = Right TyGrammar  --Right (TyRule (tyr2list $ map fst xs) (tyr2list rs))
    | otherwise = tyFail "Ill typed rule creation command."
-validateRuleCreate (Right _) _ _ _ = tyFail "Illega type name for rule creation"  
+validateRuleCreate (Right TyStr) _ _ (Right _) = tyFail "Illegal body for rule creation"
+validateRuleCreate (Right _) _ _ (Right TyMetaAPeg) = tyFail "Illegal type name for rule creation"  
 validateRuleCreate (Left m) _ _ _ = Left m  
  
  
@@ -83,12 +84,14 @@ varDecChk :: NonTerminal -> Var -> TYResult -> APegSt TYResult
 varDecChk nt v l@(Left _) = return l
 varDecChk nt v (Right t) = do mt <- varTypeOn nt v
                               maybe (recordVarOn nt v t >> (return $ pure TyAPeg) )
-                                    (\t' ->  if t==t' then return $ pure TyAPeg else return $ tyFail ("Illegal bind of " ++ (show v) ++ " at rule " ++ nt) ) 
+                                    (\t' ->  if t==t' then return $ pure TyAPeg else return $ tyFail ("Illegal type bind of " ++ (show v) ++ " with type " ++ ( show t )++  " and type " ++ (show t') ++ " at rule " ++ nt) ) 
                                     mt
                                    
  
 tyUpdate :: NonTerminal -> (Var,Expr) -> APegSt TYResult
-tyUpdate nt b@(v,e) = inferTypeExpr nt e >>= varDecChk nt v 
+tyUpdate nt b@(v,e) = do tyr <- inferTypeExpr nt e 
+                         ftyr <- varDecChk nt v tyr
+                         return ((" >> Type error at bind of " ++ (show v) ++ " to " ++ (show e))  >|< ftyr)  
                          
 
 assureTy :: (Type-> Bool) -> String -> TYResult -> TYResult
@@ -112,36 +115,24 @@ mapPair :: Monad m => (a -> m c) -> (b -> m d) -> (a,b) -> m (c,d)
 mapPair f g (a,b) = do x <- f a
                        y <- g b
                        return (x,y)
-
-inferMExpr :: NonTerminal -> MExpr -> APegSt TYResult
-inferMExpr _ (MEpsilon) = return $ pure TyMetaExp
-inferMExpr nt (MkTyMap e)    = inferTypeExpr nt e >>= return.(assureTy (==TyMetaType) ("Argument of Meta Map Type must be MetaType, at rule " ++ nt))
-inferMExpr nt (MkTyStr)      = return $ pure TyMetaType
-inferMExpr nt (MkTyLanguage) = return $ pure TyMetaType
-inferMExpr nt (MStr e)  = inferTypeExpr nt e >>= (\t -> return $ assureTyWith (== TyStr) ("The expression " ++ (show e) ++ "must have type String. At rule " ++ nt) TyMetaExp t )
-inferMExpr nt (MVar e) = inferTypeExpr nt e >>= (\t -> return $ assureTyWith (== TyStr) ("The expression " ++ (show e) ++ "must have type String. At rule " ++ nt) TyMetaExp t )
-inferMExpr nt (MUnion e1 e2) = do t1 <- inferTypeExpr nt e1
-                                  t2 <- inferTypeExpr nt e2
-                                  case (t1,t2) of 
-                                      (Right TyMetaExp, Right TyMetaExp) -> return $ pure TyMetaExp
-                                      (Left xs , _) -> return $ Left (("Meta union parameters incorret at rule " ++ nt):xs)
-inferMExpr nt (MMapLit []) = return $ tyFail (" Untypeable meta map literal at rule " ++ nt)   
-inferMExpr nt (MMapLit xs) = do xs' <- mapM (mapPair (inferTypeExpr nt) (inferTypeExpr nt)) xs
-                                case (all (\(k,e) -> (k == Right TyMetaExp) && (e == Right TyMetaExp) ) xs')of
-                                    True -> return $ pure TyMetaExp
-                                    False -> return $ tyFail ("Incorrect meta map lieteral at rule " ++ nt) 
-inferMExpr nt (MMapIns e1 e2 e3) =  do xs <- mapM (inferTypeExpr nt) [e1,e2,e3]
-                                       if (all (== Right TyMetaExp) xs) then return $ pure TyMetaType
-                                                                        else return $ tyFail ("Meta Map insertion incorrect at rule " ++ nt) 
-inferMexpr nt (MapAccess e1 e2)  = do xs <- mapM (inferTypeExpr nt) [e1,e2]
-                                      if (all (== Right TyMetaExp) xs) then return $ pure TyMetaType
-                                                                       else return $ tyFail ("Meta Map access incorrect at rule " ++ nt)                         
-
+                                                          
+                                                                       
+-- 0 menas plus 
+checkBinOp :: String -> Int -> Type -> Type ->  APegSt (TYResult)
+checkBinOp nt 0 TyInt TyInt = return $ pure TyInt  
+checkBinOp nt 0 _ _ =   return $ tyFail ("Plus operation type mismatch "++ nt)
 
 inferTypeExpr :: NonTerminal -> Expr -> APegSt (TYResult)
 inferTypeExpr nt (Str _)  = return $ pure TyStr
+inferTypeExpr nt (ILit i)  = return $ pure TyInt
 inferTypeExpr nt (Epsilon) = return $ pure TyGrammar
 inferTypeExpr nt (EVar s) = varTypeOn nt s >>= maybe (return $ tyFail ("Undeclared variable: " ++ s ++ " at rule " ++ nt)) (return.pure)
+inferTypeExpr nt (BinOp cod l r) = do tl <- inferTypeExpr nt l
+                                      tr <- inferTypeExpr nt r
+                                      case (tl,tr) of
+                                           (Right tyl, Right tyr) -> checkBinOp nt cod tyl tyr
+                                           (errl@(Left _),_) -> return errl
+                                           (_,errr@(Left _))  -> return errr
 inferTypeExpr nt (Union e d) = do  t1 <- inferTypeExpr nt e
                                    t2 <- inferTypeExpr nt d
                                    case (t1,t2) of
@@ -167,15 +158,15 @@ inferTypeExpr nt (MapAccess m k) = do tm <- inferTypeExpr nt m
 inferTypeExpr nt r@(ExtRule grm rname mapeg) = do tylam  <- inferTypeExpr nt grm 
                                                   tystr  <- inferTypeExpr nt rname
                                                   tympeg <- inferTypeExpr nt mapeg
-                                                  return $ ("Ilegal rule extension at " ++ show r) >|< (validateRuleExt tylam tystr tympeg)
+                                                  return $ ("Illegal rule extension at " ++ show r) >|< (validateRuleExt tylam tystr tympeg)
 inferTypeExpr nt r@(MkRule grm inh syn mapeg)
     = do tylam <- inferTypeExpr nt grm
          -- Meta-Dyn Checking must be done with rule context !
          results <- mapM ((inferTypeExpr nt).snd) syn
          tympeg  <- inferTypeExpr nt mapeg
          tyinh <- mapM (\(et,ee) -> inferTypeExpr nt et >>= (\tet -> inferTypeExpr nt ee >>= (\tee -> return (tet,tee) )) ) inh
-         result <- return $ ("Illegal meta rule creation at : " ++ show r) >|< (validateRuleCreate tylam tyinh results tympeg)
-         return (trace (">>>>>>|| at " ++ nt ++ " " ++ show grm ++ " :: " ++ show tylam ++ " || " ++ show result) result )
+         result <- return $ ("Illegal meta rule creation at : " ++ nt) >|< (validateRuleCreate tylam tyinh results tympeg)
+         return  result 
 
 inferTypeExpr nt (MetaPeg mpeg) = inferTypeMpeg nt mpeg 
 inferTypeExpr nt (MetaExp mexp) = inferTypeMExpr nt mexp
@@ -192,18 +183,23 @@ metaTypeError ma t@(Left t') = return $ Left (t' ++ [("Incompatible types at met
 
 inferTypeMpeg :: NonTerminal -> MAPeg -> APegSt TYResult
 inferTypeMpeg nt MkLambda = return $ pure TyMetaAPeg
-inferTypeMpeg nt mp@(MkLit e) = inferTypeExpr nt e >>= return.(assureTy (==TyStr ) ("Meta Literal\'" ++ show e ++ "\' error at rule " ++ nt))
+inferTypeMpeg nt mp@(MkLit e) = inferTypeExpr nt e >>= return.(assureTyWith (==TyStr ) ("Meta Literal\'" ++ show e ++ "\' error at rule " ++ nt) TyMetaAPeg)  
 inferTypeMpeg nt mp@(MkCal nte xs ys) = do tnt <- inferTypeExpr nt  nte 
                                            txs <- mapM (inferTypeExpr nt) xs   
                                            tys <- mapM (inferTypeExpr nt) ys 
                                            onType TyStr
                                                   tnt
                                                   (if (all isMetaType (tyr2list (txs ++ tys))) 
-                                                       then return $ pure TyLanguage 
+                                                       then return $ pure TyMetaAPeg 
                                                        else return $ tyFail ("All arguments of " ++ (show mp) ++ " must have TyMetaExp type"))  
                                                   (return $ tyFail ("The expression " ++ (show nte) ++ " should have type TyStr")) 
 inferTypeMpeg nt mp@(MkKle e) = inferTypeExpr nt e >>= \t -> onType TyMetaAPeg t (return  t) (metaTypeError mp t)
 inferTypeMpeg nt mp@(MkNot e) = inferTypeExpr nt e >>= \t -> onType TyMetaAPeg t (return  t) (metaTypeError mp t)
+inferTypeMpeg nt mp@(MkConstr c b) = do tyMc <- inferTypeExpr nt c  
+                                        tyBody <- inferTypeExpr nt b
+                                        onType TyMetaExp tyMc (onType TyMetaAPeg tyBody (return $ pure TyMetaAPeg) (metaTypeError mp tyBody)) 
+                                                              (metaTypeError mp tyMc)
+
 inferTypeMpeg nt mp@(MkSeq ee ed) 
     = do te <- inferTypeExpr nt ee 
          td <- inferTypeExpr nt ed
@@ -230,9 +226,12 @@ inferTypeMpeg nt mp@(MkAE xs) = do ys <- mapM (mapPair (inferTypeExpr nt) (infer
 inferTypeMExpr :: NonTerminal -> MExpr -> APegSt TYResult
 inferTypeMExpr nt MEpsilon     = return $ pure TyMetaExp
 inferTypeMExpr nt MkTyStr      = return $ pure TyMetaType
+inferTypeMExpr nt MkTyInt      = return $ pure TyMetaType
 inferTypeMExpr nt MkTyLanguage = return $ pure TyMetaType
+inferTypeMExpr nt MkTyGrammar  = return $ pure TyMetaType
 inferTypeMExpr nt (MkTyMap m)  = inferTypeExpr nt m >>= return.(assureTy (==TyMetaType) ("Meta map must have a Meta type as argument at rule " ++ nt))
 inferTypeMExpr nt (MVar e)     = inferTypeExpr nt e >>= return.(assureTyWith (==TyStr) ("Meta Variable expression must reduce to String type at rule" ++ nt) TyMetaExp)
+inferTypeMExpr nt (MILit e)    = inferTypeExpr nt e >>= return.(assureTyWith (==TyInt) ("Meta Variable expression must reduce to Int type at rule" ++ nt) TyMetaExp)
 inferTypeMExpr nt (MStr e)     = inferTypeExpr nt e >>= return.(assureTyWith (==TyStr) ("Meta Variable expression must reduce to String type at rule" ++ nt) TyMetaExp)
 inferTypeMExpr nt (MUnion e1 e2) = do  t1 <- inferTypeExpr nt e1
                                        t2 <- inferTypeExpr nt e2
@@ -262,6 +261,11 @@ inferPegType nt r@(NT nt' inh syn)
 
 inferPegType nt p@(Kle e) = inferPegType nt e >>= unPegTyInfer "Klenee" nt
 inferPegType nt p@(Not e) = inferPegType nt e >>= unPegTyInfer "Not" nt
+inferPegType nt p@(Constr e a) = do c <- inferTypeExpr nt e  
+                                    case c of 
+                                         (Right TyBool) -> inferPegType  nt a
+                                         (Right _) -> return $ tyFail ("Constraint expression must have boolean type at rule " ++ nt)
+                                         e         -> return e
 
 inferPegType nt p@(Seq e d) = do tye <- inferPegType nt e 
                                  tyd <- inferPegType nt d
@@ -276,7 +280,7 @@ inferPegType nt p@(Alt e d) = do renv  <- localRuleEnv nt
                                  tyRuleEnvSwap nt (M.intersection renv' renv'')
                                  return tr
                                  
-inferPegType nt p@(AEAttr xs)  =  (mapM (tyUpdate nt) xs) >>= return.(foldr1 tyClsc)
+inferPegType nt p@(Update xs)  =  (mapM (tyUpdate nt) xs) >>= return.(foldr1 tyClsc)
 inferPegType nt p@(Bind v peg) = do tyv <- varTypeOn nt v
                                     typ <- inferPegType nt peg
                                     case (tyv,typ) of
@@ -291,10 +295,9 @@ checkRuleDef :: [Type] -> [Type] -> ApegRule -> APegSt (TYResult)
 checkRuleDef inh syn r@(ApegRule nt inh' syn' peg) 
     | matchAll (map fst inh') inh = do tb <- inferPegType nt peg
                                        innerEnv <- localRuleEnv nt
---                                        trace (unlines $ ("---" ++ nt++ "---"):ppRintTyRuleEnv innerEnv) (return ())
                                        ts <- mapM (inferTypeExpr nt) (map snd syn')
                                        if (matchAll (tyr2list ts) (map fst syn') ) then  return $ (assureTyWith (==TyAPeg)  ("Rule body " ++ nt ++ " does not type") (TyRule inh syn)  tb)
-                                                                                            else  return $ tyFail ("Divergent returns types at rule " ++ nt)
+                                                                                   else  return $ tyFail ("Divergent returns types at rule " ++ nt)
     | otherwise = return  $ tyFail  ("Divergent argument list definitions of Rule " ++ nt)
 
 

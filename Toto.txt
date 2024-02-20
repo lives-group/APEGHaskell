@@ -1,0 +1,5 @@
+ 
+Fechar sintaxe de APEG
+Fazer casos de teste
+Criar um repositório MicroSugar
+

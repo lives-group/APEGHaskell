@@ -1,16 +1,13 @@
 define sfor {
    stmt -> whites "for" whites expr whites "to" whites expr whites block;   
+}define emult {
+   expr -> cexpr whites "*" whites cexpr;
 }
-syntax sfor {
-   j := 0;
-   for j+1 to j+10{
-      print(j);
-   }
-}
+
 {
   i := 0;
   x := i+1;
   if(i < 10){
-     i := i + 1;
+     i := %emult(i*2)+i;
   }
 }

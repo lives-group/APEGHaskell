@@ -1,9 +1,7 @@
 {-|
 Module      : APEG.Interpreter.State
 Description : Representation of a state for the APEG interpreter/type-checker
-Copyright   : (c) Leonardo Vieira dos Santos Reis, 2018
-                  Rodrigo Geraldo Ribeiro, 2018
-                  Elton M. Cardoso, 2018
+Copyright   : 
 License     : GPL-3
 Stability   : experimental
 Portability : POSIX
@@ -23,9 +21,12 @@ module APEG.Interpreter.State(
     
     rVal,
     rErr,
+    rootr,
     assureOkStatus,
     remInp,
+    roundRemInp,
     setResult,
+    catResult,
     accPrefix,
     getPrefix,
     resetPrefix,
@@ -43,6 +44,7 @@ module APEG.Interpreter.State(
     upTyEnv,
     withResult,
     tyEnvFromRule,
+    tyEnvFromGrm,
     zeroSt,
     pprintTyEnv,    
     ppRintTyRuleEnv,
@@ -54,6 +56,7 @@ import qualified Data.Map as M
 import APEG.Interpreter.Value
 import APEG.Interpreter.MaybeString
 import APEG.Interpreter.DT
+import APEG.Interpreter.TypeEnvironment
 
 
 -- | Value environment, a mapping form names to 'Values'
@@ -62,25 +65,6 @@ type VEnv  = M.Map String Value
 -- | A derivation tree whose node also carries the local enviroment of the rule (usefull for debugging !)
 type DTV = DT VEnv
 
--- | Type environment, a mapping from names to a non terminal 'Type' an 
--- it's inner enviroment
-type TyEnv = M.Map String (Type , TyRuleEnv) 
---
--- Thye type enviroment layout is like this:
---
--- r<int x returns  int y> :=  { x = 10} 'a' r<x+1,y> / 'b' {y = 1;}
---  -----------------------------------------
---  r   |  Type (of the rule) | TyRuleEnv (Rule local declaration types)
---      |                     | ---------------- 
---      |                     |  x : int
---      |  int -> int         |  y : int
---      |                     |  z : int
---      |                     | ----------------
---  -----------------------------------------
---
-
--- | Type environment for a rule. Maps varialble names to 
-type TyRuleEnv = M.Map String Type 
 
 -- | The recognizer input is represented by an String.
 type Input = String 
@@ -106,21 +90,28 @@ newtype PureState =   PureState (VEnv,     --  An envoironment of values
 
 
 -- | Returns the current language attribute.
-language :: PureState -> ApegGrm
+language :: PureState -> (ApegGrm, TyEnv)
 language (PureState (ve,te,rec,inp,res)) = case ve M.!?  "g" of
-                                                Just (VLan grm) -> grm
+                                                Just (VLan grm ty) -> (grm, ty)
                                                 Just ( _ )     -> error "Unexpected value for language attribute 'g' "
                                                 Nothing        -> error "Undefined value for language attribute 'g'"
 
-
 getResult :: PureState -> Result
 getResult (PureState (_,_,_,_,r)) = r
+
+catResult ::  Result -> Result -> Result
+catResult r1@(Left _) r2 = r1
+catResult (Right xs) r2 = fmap (xs ++) r2
 
 -- | Builds a success Result from a particular node value.
 rVal :: DTV -> Result
 rVal = Right.(:[])
 
 
+-- | Create a root on top of the current results
+rootr :: String -> PureState -> PureState 
+rootr rn st@(PureState (_, _, _, _, (Left _))) = st
+rootr rn (PureState (v, t, s, i, (Right xs))) = (PureState (v, t, s, i, (Right $ [dtRoot rn v (reverse xs)]))) 
 
 -- | Builds a failure Result from an error message.
 rErr :: String -> Result
@@ -157,6 +148,8 @@ resetPrefix (PureState (e,t,_,inp,r)) = PureState (e,t,emptyMybStr,inp,r)
 remInp :: PureState -> String
 remInp (PureState (_,_,_,inp,_)) = inp 
 
+roundRemInp :: Int -> PureState -> String
+roundRemInp n (PureState (_,_,_,inp,_)) = (roundInput n inp)
 
 splitPrefix :: String -> String -> (String,String)
 splitPrefix xs ys = test (splitAt (length xs) ys)
@@ -229,9 +222,9 @@ withResult err f (PureState (ve,te,rec,inp,Left s)) = PureState (ve,te,rec,inp, 
 withResult err f (PureState (ve,te,rec,inp,Right r)) = PureState (ve,te,rec,inp, f r)
 
 
--- | RConstruct an Initial state form a given Grammar and a input string.
+-- | Construct an Initial state form a given Grammar and a input string.
 zeroSt :: ApegGrm -> String -> PureState
-zeroSt grm s = PureState (M.fromList [("g",VLan grm)], M.fromList zs, nullMybStr, s, Right [])
+zeroSt grm s = PureState (M.fromList [], M.fromList zs, nullMybStr, s, Right [])
     where zs = map ruleEntry grm
           
 -- | Constructs a type environment from a rule definition. 
@@ -244,19 +237,8 @@ ruleEntry (ApegRule nt inh syn _ ) = (nt,(TyRule (map fst inh) (map fst syn),M.f
 tyEnvFromRule :: ApegRule -> TyEnv
 tyEnvFromRule r = M.fromList [ruleEntry r]
 
-pprintTyEnv :: TyEnv -> String
-pprintTyEnv tye = unlines $ M.foldrWithKey (\k (tr,tre) l -> (k ++ " :: " ++ pprintType tr ++ " \n" ++ ppInnerEnv tre):l) [] tye
-  where
-      ppInnerEnv = unlines.ident.ppRintTyRuleEnv
-      ident = map ("    "++)
-
-ppRintTyRuleEnv :: TyRuleEnv -> [String]
-ppRintTyRuleEnv m =  pprintMap pprintType m
-
-pprintMap :: (a -> String) -> M.Map String a -> [String]
-pprintMap ss m = M.foldrWithKey (\k e l -> (k ++ " :: " ++ ss e):l) [] m
-
-
+tyEnvFromGrm :: ApegGrm -> TyEnv
+tyEnvFromGrm g = M.fromList (map ruleEntry g)
 
 -- | Simplified version of show that only prints the input and recognized input aspects of the state.          
 quickShow :: PureState -> String

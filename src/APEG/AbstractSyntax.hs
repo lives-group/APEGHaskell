@@ -5,7 +5,7 @@ import Control.Monad
 import Data.Char 
 import Data.List
 import qualified Data.Map as M
-import Test.QuickCheck
+
 
 
 type NonTerminal = String
@@ -24,33 +24,39 @@ data APeg = Lambda                            -- ^ The Lambda Literal
          | Not APeg
          | Seq APeg APeg
          | Alt APeg APeg
-         | AEAttr [(Var,Expr)]                           -- The list of attributions of expressions to varaibales
+         | Update [(Var,Expr)]                           -- The list of attributions of expressions to varaibales
+         | Constr Expr APeg
          | Bind Var APeg
-         deriving (Show,Eq)
+         deriving (Eq,Show)
 
-data Expr = Str String                                   -- string literal
-          | Epsilon                                      -- The empty grammar
-          | EVar Var                                     -- variable 
-          | MetaPeg MAPeg                                -- meta level PEG
-          | MetaExp MExpr                                -- meta level Expr
-          | Union Expr Expr                              -- Uniao Language Language
-          | ExtRule Expr Expr Expr                       -- ExtRule  Grammar RuleName Apeg
+data Expr = Str String                                    -- string literal
+          | ILit Int
+          | Epsilon                                       -- The empty grammar
+          | BinOp Int Expr Expr                           -- Arbitrary Binary Operation    
+          | EVar Var                                      -- variable 
+          | MetaPeg MAPeg                                 -- meta level PEG
+          | MetaExp MExpr                                 -- meta level Expr
+          | Union Expr Expr                               -- Uniao Language Language
+          | ExtRule Expr Expr Expr                        -- ExtRule  Grammar RuleName Apeg
           | MkRule Expr [(Expr,Expr)] [(Expr, Expr)] Expr -- new non terminal creation
           | MapLit [(Expr,Expr)]                          -- map literal
-          | MapIns Expr Expr Expr                        -- Map insertion method: m[s / v] means MapIns m s v 
-          | MapAccess Expr Expr                          -- Map Access method: m[s] = MapAccess m s
+          | MapIns Expr Expr Expr                         -- Map insertion method: m[s / v] means MapIns m s v 
+          | MapAccess Expr Expr                           -- Map Access method: m[s] = MapAccess m s
           deriving (Show,Eq)
 
           
 data MExpr = MVar Expr
            | MEpsilon
            | MStr Expr
+           | MILit Expr
            | MUnion Expr Expr 
            | MMapLit [(Expr,Expr)]
            | MMapIns Expr Expr Expr
            | MMapAcces Expr Expr
            | MkTyStr
+           | MkTyInt
            | MkTyLanguage
+           | MkTyGrammar
            | MkTyMap Expr
            deriving (Show, Eq)
            
@@ -60,12 +66,15 @@ data MAPeg = MkLambda
            | MkCal Expr [Expr] [Expr]
            | MkKle Expr 
            | MkNot Expr
+           | MkConstr Expr Expr
            | MkSeq Expr Expr
            | MkAlt Expr Expr
            | MkAE [(Expr,Expr)] 
            deriving (Show,Eq)
     
 data Type = TyStr
+          | TyBool
+          | TyInt
           | TyAPeg
           | TyGrammar
           | TyMap Type
@@ -73,12 +82,14 @@ data Type = TyStr
           | TyMetaAPeg
           | TyMetaExp
           | TyMetaType
-          | TyLanguage -- This type is to be attributed to Grammar whose all rules are correct.
+          | TyLanguage -- This type is to be attributed to Grammar whose all rules are correct.          
           deriving (Show, Eq)
 
-          
+-- =================== AST String Convertion =================== --
+
 pprintType :: Type -> String
 pprintType TyStr  = "Str"
+pprintType TyInt  = "Int"
 pprintType TyAPeg = "APeg"
 pprintType TyGrammar = "Grammar"
 pprintType TyMetaAPeg = "#APeg"
@@ -87,6 +98,20 @@ pprintType TyMetaType = "#Type"
 pprintType TyLanguage = "Lang"
 pprintType (TyMap t) = "[" ++ (pprintType t) ++"]"
 pprintType (TyRule inh syn) = "(" ++ (concat $ intersperse "," $ map pprintType inh) ++ ") -> (" ++ (concat $ intersperse "," $ map pprintType syn) ++ ")" 
+
+
+pprintApeg :: APeg -> String
+pprintApeg Lambda = "Eps"
+pprintApeg (Lit s) = "\"s\""
+pprintApeg (NT s args vrs) = s ++ "<???>"
+--Kle APeg
+--Not APeg
+--Seq APeg APeg
+--Alt APeg APeg
+--Update [(Var,Expr)]
+--Constr Expr APeg
+--Bind Var APeg
+
 
 
 -- =================== AST Manipulation Utilities =================== --
@@ -124,41 +149,3 @@ grmAddRule (x@(ApegRule nt inh syn body):xs) r@(ApegRule nt' inh' syn' body')
     | (nt == nt') && ((inh /= inh') || (syn /= syn')) = error ("Conflicting definitions of " ++ nt ++ " when composing languages.")
     | (nt /= nt') = x: grmAddRule xs r 
 
--- =================== Show Utilities =================== --
-
-prec :: APeg -> Int
-prec  Lambda = 0
-prec (Lit _) = 0
-prec (Kle _) = 1
-prec (Not _) = 1
-prec (Seq _ _) = 2
-prec (Alt _ _) = 3
-
-parensStr :: Bool -> String -> String
-parensStr True s  = "(" ++ s ++ ")" 
-parensStr False s = s
-
-isPegAlt :: APeg -> Bool
-isPegAlt (Alt _ _) = True
-isPegAlt _       = False
-
-isPegSeq :: APeg -> Bool 
-isPegSeq (Seq _ _) = True
-isPegSeq _       = False
-
-parensAssoc :: APeg -> APeg -> Bool
-parensAssoc encl inner 
-    | (isPegAlt encl) && (isPegSeq inner) = True
-    | (isPegSeq encl) && (isPegAlt inner) = True
-    | otherwise = False
-    
--- instance Show APeg where
---      showsPrec d (Lit l)        = \s -> ('\'':l ++ ['\'']) ++ s
---      showsPrec d Lambda         = \s -> ("\x03BB") ++ s
---      showsPrec d (NT n xs ys)   = \s ->n ++ s
---      showsPrec d c@(Kle p)      = (parensStr (prec c > d) ).(\s -> s ++ "*").(showsPrec (prec c) p) 
---      showsPrec d c@(Not p)      = (parensStr (prec c > d) ).(showString "!").(showsPrec (prec c) p)
---      showsPrec d c@(AEAttr xs)  = (showString "{").(showsPrec (prec c) p).(showString "}")
---      showsPrec d c@(Seq xs)     = (parensStr (prec c > d) ).(foldr1 (.) (map (showsPrec (prec c)) xs)) 
---      showsPrec d c@(Alt xs)     = (parensStr (prec c > d) ).(foldr1 (\c d -> c.(showString "|").d) (map (showsPrec (prec c)) xs))
---      show p                     = showsPrec 3 p ""

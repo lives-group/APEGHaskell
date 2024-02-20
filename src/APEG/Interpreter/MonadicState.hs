@@ -2,9 +2,7 @@
 {-|
 Module      : APEG.Interpreter.MonadicState
 Description : Representation of a state for the APEG interpreter/type-checker
-Copyright   : (c) Leonardo Vieira dos Santos Reis, 2018
-                  Rodrigo Geraldo Ribeiro, 2018
-                  Elton M. Cardoso, 2018
+Copyright   : 
 License     : GPL-3
 Stability   : experimental
 Portability : POSIX
@@ -26,6 +24,7 @@ import APEG.Interpreter.MaybeString
 import APEG.Interpreter.State
 import APEG.Interpreter.Value
 import APEG.Interpreter.DT
+
 
 -- | State for the APEG interpreter: 
 type APegSt = State PureState 
@@ -51,19 +50,24 @@ pfailMsg :: String -> APegSt ()
 pfailMsg s = modify (setResult (rErr s))
 
 
+swapResult :: Result ->  APegSt (Result)
+swapResult r = do r' <- get >>= return.getResult
+                  modify (\rs-> setResult r rs)
+                  return r'
+
+dtRuleBuild :: APegSt () -> APegSt ()
+dtRuleBuild c = do r <- swapResult (Right [])
+                   c
+                   modify (\rs-> setResult (catResult (getResult rs) r) rs)
+                   
+
 patternMatch :: String -> APegSt ()
 patternMatch s = modify (match s)
 
 
 -- | Return the laguage attribute.
-getLanguage :: APegSt (ApegGrm)
+getLanguage :: APegSt (ApegGrm, TyEnv)
 getLanguage = get >>= return.language
-
--- | Extends the current grammar g with another give grammar g'. The rules 
--- of g'will be appended at the grammar g
-langExt :: ApegGrm -> APegSt ()
-langExt grm 
-     =  modify (\pst -> upValEnv (M.update (\oldg -> Just $ vlan (joinRules (language pst) grm)) "g") pst)
 
      
 -- | Access the value of a variabel. If variable's name is undefined, the result will be an runtime error.

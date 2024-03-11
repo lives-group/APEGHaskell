@@ -26,7 +26,7 @@ Sample input tests for MicroSugar language can be found st the inputSamples/muSu
 
 
 ```
-[APEGLitleToy-Anymous]$ stack exec -- APEGlt muSugar inputSamples/muSugar/SimpleCMD.txt
+[APEGHaskell-Anymous]$ stack exec -- APEGlt muSugar inputSamples/muSugar/SimpleCMD.txt
 prog
 ├─ block
 │  ├─ {

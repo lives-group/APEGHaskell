@@ -1,4 +1,4 @@
-#APEGHaskell
+# APEGHaskell
 
 This implementation is a prototype for an proposal of a type system and a interpreter for APEG.
 

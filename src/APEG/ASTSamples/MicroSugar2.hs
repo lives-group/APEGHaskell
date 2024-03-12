@@ -1,5 +1,5 @@
 
-module APEG.ASTSamples.MicroSugar where
+module APEG.ASTSamples.MicroSugar2 where
 {-# LANGUAGE OverloadedStrings #-}
 
 import Data.List
@@ -87,7 +87,7 @@ microSugar = [ruleProg,ruleNewSyn,ruleRule,
               rulePattern,ruleSeq,ruleExtStmt,
               ruleKFator,rulepFator,ruleExpr,
               ruleBlock,ruleStmt,ruleCExpr,
-              ruleFator,ruleID,whiteRule,whiteRule1]
+              ruleFator, ruleFatorExt, ruleID,whiteRule,whiteRule1]
 
 
 ruleProg :: ApegRule
@@ -249,12 +249,20 @@ ruleFator :: ApegRule
 ruleFator = ApegRule "fator"
                      [(TyLanguage,"g")]
                      []
-                     (alts [ seqs [Lit "(", whts, NT "expr" [g] [], whts, Lit ")"],
+                     (alts [ NT "fatorExt" [g] [],
+                             seqs [Lit "(", whts, NT "expr" [g] [], whts, Lit ")"],
                              Lit "true",
                              Lit "false",
                              Ann Flat num,
                              identifier
                            ])
+
+ruleFatorExt :: ApegRule
+ruleFatorExt = ApegRule "fatorExt"
+                     [(TyLanguage,"g")]
+                     []
+                     (Not Lambda)
+
 ruleID :: ApegRule
 ruleID = ApegRule "identifier"
                      [(TyLanguage,"g")]

@@ -1,0 +1,10 @@
+define func {
+    fatorExt -> whites identifier whites params whites ;
+    params -> "(" whites paramList whites ")";
+    paramList -> expr ( whites "," whites expr)*
+              / $;
+}
+
+syntax func {
+   x := fat(;
+}

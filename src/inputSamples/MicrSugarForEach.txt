@@ -1,0 +1,11 @@
+define foreach {
+   stmt -> whites "foreach(" whites identifier whites ":" whites expr  whites ")" block ;
+}
+
+syntax foreach {
+   x := 10;
+   foreach( i : x){
+      y := i + 10;
+   }
+}
+

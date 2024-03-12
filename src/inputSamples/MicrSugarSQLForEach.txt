@@ -1,3 +1,6 @@
+define foreach {
+   stmt -> whites "for(" whites identifier whites ":" whites expr  whites ")" block ;
+}
 define query {
    stmt      -> whites identifier whites "<--?" whites SQLexp whites ";";
    SQLexp    -> "SELECT" whites1 fieldList whites1
@@ -9,10 +12,11 @@ define query {
    SQLCond   -> field whites OP whites identifier;
    OP        -> "==" / "!=" / "<" / ">";
 }
-
-syntax query {
+syntax query, foreach {
    x <--?  SELECT * FROM table;
-   y <--?  SELECT phonebook.addres FROM phonebook WHERE phonebook.lastname == connor;
-  z := x + 10;
+   for(z : x){
+      print(z);
+   }
 }
+
 

@@ -15,7 +15,7 @@ import Control.Monad.State.Lazy
 runGrammar :: ApegGrm -> [(Var,Value)] -> String -> IO ()
 runGrammar g vs s = do (st, ps) <- return  (runState (interpGrammar vs g) (zeroSt g s))
                        case (getResult ps) of
-                            (Right dt) ->  putStrLn (pprintDT $ head dt) >> putStrLn "ACCEPTED" 
+                            (Right dt) ->  putStrLn (show $ head dt) >> putStrLn "ACCEPTED"
                             (Left xs)  ->  putStrLn "REJECTED ! Error list:" >> 
                                            putStrLn (unlines xs) >> 
                                            putStrLn "-----------------------------" >>

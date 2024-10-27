@@ -13,6 +13,6 @@ define query {
 syntax query {
    x <--?  SELECT * FROM table;
    y <--?  SELECT phonebook.addres FROM phonebook WHERE phonebook.lastname == connor;
-  z := x + 10;
+   z := x + 10;
 }
 

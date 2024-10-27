@@ -25,12 +25,18 @@ try p = do s' <- get
            r <- p
            onSuccess (return ()) (put s' >> pfail)
 
-klenne :: APegSt a -> APegSt [a]
+{-klenne :: APegSt a -> APegSt [a]
 klenne p =  
      do s <- get 
         x <- p 
         xs <- onSuccess (klenne p) (put s >> done >> return [])
-        return (x:xs)            
+        return (x:xs)  -}
+
+klenne :: APegSt () -> APegSt ()
+klenne p =
+     do s <- get
+        p
+        onSuccess (klenne p) (put s >> done)
 
 sequential :: APegSt () -> APegSt () -> APegSt ()
 sequential p q = do st <- get
@@ -52,15 +58,16 @@ notPeg p = do pst <- get
 constraintApeg :: Value -> APegSt () -> APegSt ()
 constraintApeg (VBool True)  p  = p
 constraintApeg (VBool False) _  = pfail  
-constraintApeg _ _ = error "Non boolean value used at the test on a condition APEG expression."
+constraintApeg _ _ = error "Non boolean value used on a constrained APEG expression."
 
 bindApeg :: Var -> APegSt () -> APegSt ()
 bindApeg s p = do prfx <- getStr
                   resetStr
                   p
-                  res <- getStr
-                  modify (prependPrefix prfx)
-                  varSet s (vstr $ fromMybStr res) 
+                  onSuccess (do res <- getStr
+                                modify (prependPrefix prfx)
+                                varSet s (vstr $ fromMybStr res) )
+                            pfail
 
 update :: Var -> APegSt Value -> APegSt ()
 update v p =  p >>= (varSet v)

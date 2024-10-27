@@ -13,7 +13,9 @@ module APEG.Interpreter.DT(
    DT,
    dtRoot,
    dtLeaf,
+   dtFlat,
    dtNull,
+   liftNT,
    pprintDT,
 ) where
 
@@ -26,6 +28,11 @@ data DT a = DTN String a  [DT a] -- | Non Terminal Node Constructor: Recieves th
         | DTNIL                  -- | A null node
         deriving (Eq)
         
+
+
+liftNT :: DT a -> [DT a]
+liftNT (DTN s x ys) = ys
+liftNT dt = [dt]
 
 pprintDT :: DT a -> String
 pprintDT (DTT _ s)     = s
@@ -45,6 +52,11 @@ textTree prfx ((DTT _ s):xs) = (prfx ++ "\x251c\x2500 " ++ (warpChar s))  :  (te
 textTree prfx ((DTN s _ ys):xs) = (prfx ++ "\x251c\x2500 " ++ (warpChar s))  : (textTree (prfx ++ "\x2502  ") ys) ++ (textTree prfx xs)
 
 
+
+dtFlat :: DT a -> String
+dtFlat DTNIL = ""
+dtFlat (DTT _ s) = s
+dtFlat (DTN nt _ xs) = concatMap dtFlat xs
 
 dtRoot :: String -> a  -> [DT a] -> DT a
 dtRoot = DTN

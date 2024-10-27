@@ -13,61 +13,20 @@ import APEG.Interpreter.State
 import APEG.TypeSystem
 import APEG.PlayGround
 import Data.String
+import APEG.DSL
 
-
-alts :: [APeg] -> APeg
-alts  = foldl1 Alt
-
-seqs :: [APeg] -> APeg
-seqs = foldl1 Seq
-
-chrs :: [Char] -> APeg
-chrs = alts.(map (Lit.(:[])))
-
-many1 :: APeg -> APeg
-many1 p = Seq p (Kle p)
-
-digit :: APeg
-digit = chrs ['0'..'9']
-
-num :: APeg
-num = many1 digit
-
-upper :: APeg
-upper = chrs ['A'..'Z']
-
-lower :: APeg
-lower = chrs ['a'..'z']
-
-lit :: APeg
-lit = Kle $ chrs "()*+,-./0123456789:;<=>!?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}"
-
-identifier :: APeg
-identifier =   Ann Flat (Seq lower (Kle (Alt lower digit )))
-
-rid :: APeg
-rid =  Ann Flat (Seq (Alt lower upper) (Kle $ (alts [lower,upper,digit])))
-
-reswrd :: String -> APeg
-reswrd s = Lit s
-
-fator :: APeg
-fator = Alt num identifier
-
-wht :: APeg
-wht = chrs ['\n',' ','\t']
-
-whts :: APeg
-whts = Ann Dump (Kle wht)
-
-whts1 :: APeg
-whts1 = Ann Dump (many1 wht)
+idLit :: APeg
+idLit = Kle $ chrs "()*+,-./0123456789:;<=>!?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}"
 
 semic :: APeg
-semic = Ann Dump (Lit ";")
+semic = Ann Dump (lit ";")
 
-g :: Expr
-g = EVar "g"
+rid :: APeg
+rid =  Ann Flat (Seq (Alt lower upper) (star $ (alts [lower,upper,digit])))
+
+--
+-- g :: Expr
+-- g = v "g"
 -- ========== MicroSugar APEG Grammar ============= --
 
 
@@ -83,194 +42,200 @@ sig2str (s, xs, ys) = s ++ " : " ++
                       (concat $ intersperse "," $ map (pprintType.fst) ys)
 
 microSugar :: ApegGrm
-microSugar = [ruleProg,ruleNewSyn,ruleRule,
-              rulePattern,ruleSeq,ruleExtStmt,
-              ruleKFator,rulepFator,ruleExpr,
-              ruleBlock,ruleStmt,ruleCExpr,
-              ruleFator,ruleID,whiteRule,whiteRule1]
+microSugar = [ruleProg,
+              ruleNewSyn,
+              ruleRule,
+              rulePattern,
+              ruleSeq,
+              ruleExtStmt,
+              ruleKFator,
+              rulepFator,
+              ruleExpr,
+              ruleBlock,
+              ruleStmt,
+              ruleCExpr,
+              ruleFator,
+              ruleID,
+              whiteRule,
+              whiteRule1]
 
 
 ruleProg :: ApegRule
-ruleProg = ApegRule "prog"
-                    [(TyLanguage,"g")]
+ruleProg = rule "prog"
+                    ["g" .:: tLang]
                     []
-                    (seqs [ Update [("sigma",MapLit [(Str "0",Epsilon)])],
-                            Kle (NT "newSyn" [g,(EVar "sigma")] ["sigma"]),
-                            many1 $ Alt (NT "rStmt" [g,EVar "sigma"] []) (NT "block" [g] [])
+                    (seqs [ "sigma" .<. mapvals [(Str "0",eps)],
+                            star (call "newSyn" [g,(v "sigma")] ["sigma"]),
+                            star1 $ (call "extBlock" [g,v "sigma"] []) ./.
+                                    (call "block" [g] [])
                           ])
 
 ruleNewSyn :: ApegRule
-ruleNewSyn = ApegRule "newSyn"
-                      [(TyLanguage,"g"),
-                       (TyMap TyGrammar,"s")]
-                      [(TyMap TyGrammar,EVar "s")]
-                      (seqs [Update [("lan",Epsilon)],
-                             Lit "define",
+ruleNewSyn = rule "newSyn"
+                      ["g" .:: tLang,
+                       "s" .:: (tMap tGrm)]
+                      [v "s" .:: (tMap tGrm)]
+                      (seqs ["sigma" .<. eps,
+                             lit "define",
                              wht,
-                             Bind "n" rid,
+                             "n" .=.  rid,
                              whts,
-                             Lit "{",
+                             lit "{",
                              whts,
-                             Kle $ seqs [NT "rule" [g] ["r"],
-                                         Update [("lan", Union (EVar "lan") (EVar "r"))]],
+                             star $ seqs [call "rule" [g] ["r"],
+                                          "sigma" .<. (v "sigma" <+: v "r")],
                              whts,
-                             Lit "}",
+                             lit "}",
                              whts,
-                             Update [("s",MapIns (EVar "s") (EVar "n") (EVar "lan"))]
+                             "s" .<. mapins (v "s") (v "n") (v "sigma")
                             ])
 
 ruleRule :: ApegRule
-ruleRule = ApegRule "rule"
-                    [(TyLanguage,"g")] -- Tem um problema aqui ! A sintaxe não tem meios para falar de tipos !
-                    [(TyGrammar,MkRule (EVar "nt") [(MetaExp MkTyLanguage,Str "g")] [] (EVar "p"))]
-                    (seqs [ whts,
-                            Bind "nt" rid,
+ruleRule = rule "rule"
+                     ["g" .:: tLang]
+                     [ mkRule (v "nt") [(mX mkTLang, str "g")] [] (v "p") .:: tGrm]
+                     (seqs [whts,
+                            "nt" .=. rid,
                             whts,
-                            Lit "->",
+                            lit "->",
                             whts,
-                            NT "pattern" [g] ["p"],
+                            call "pattern" [g] ["p"],
                             whts,
-                            Lit ";"
+                            lit ";"
                            ] )
 
 rulePattern :: ApegRule
-rulePattern = ApegRule "pattern"
-                        [(TyLanguage,"g")]
-                        [(TyMetaAPeg,EVar "pe")]
-                        (seqs [ NT "pseq" [g] ["pe"],
-                                Kle (seqs [whts,
-                                           Lit "/",
+rulePattern = rule "pattern"
+                        ["g" .:: tLang]
+                        [v "pe" .:: tMAPeg]
+                        (seqs [ call "pseq" [g] ["pe"],
+                                star (seqs [whts,
+                                           lit "/",
                                            whts,
-                                           NT "pseq" [g] ["pd"],
-                                           Update [("pe",MetaPeg $ MkAlt (EVar "pe") (EVar "pd"))]])
-
+                                           call "pseq" [g] ["pd"],
+                                           "pe" .<. aX  ( v "pe" |/| v "pd" ) ])
                               ])
 --
 ruleSeq :: ApegRule
-ruleSeq = ApegRule "pseq"
-                        [(TyLanguage,"g")]
-                        [(TyMetaAPeg,EVar "pe")]
-                        (seqs [NT "pKFator" [g] ["pe"],
-                               Kle $ seqs [
-                                           whts,
-                                           NT "pKFator" [g] ["pd"],
-                                           Update [("pe",MetaPeg $ MkSeq (EVar "pe") (EVar "pd"))]
-                              ]])
+ruleSeq = rule "pseq"
+                   ["g" .:: tLang]
+                   [v "pe" .:: tMAPeg]
+                   (seqs [call "pKFator" [g] ["pe"],
+                          star $ seqs [
+                                       whts,
+                                       call "pKFator" [g] ["pd"],
+                                       "pe" .<. aX (v "pe" |:| v "pd")
+                                       ]])
 
 ruleKFator :: ApegRule
-ruleKFator = ApegRule "pKFator"
-                     [(TyLanguage, "g")]
-                     [(TyMetaAPeg,  EVar "pf")]
-                     (seqs [ NT "pFator" [g] ["kf"],
-                             whts,
-                             alts [ Seq (Lit "*") (Update[("pf", MetaPeg $ MkKle (EVar "kf"))]),
-                                    Seq (Lambda)  (Update[("pf", EVar "kf")])]])
+ruleKFator
+ = rule "pKFator" ["g" .:: tLang] [v "pf" .:: tMAPeg]
+        ( call "pFator" [v "g"] ["kf"] .:. whts .:.
+           ( (lit "*" .:. "pf" .<. aX (mXStar (v "kf")) ) ./.
+             (lam     .:. "pf" .<. v "kf") )
+        )
 
 
 rulepFator :: ApegRule
-rulepFator = ApegRule "pFator"
-                     [(TyLanguage, "g")]
-                     [(TyMetaAPeg,  EVar "pf")]
-                     (alts [seqs [ Lit "!",
+rulepFator = rule "pFator" ["g" .:: tLang] [v "pf" .:: TyMetaAPeg]
+                     (alts [seqs [ lit "!", whts, call "pFator" [g] ["f"], "pf" .<. aX (mXNot (v "f") ) ],
+                            Ann Flat (seqs [ lit "\"",
+                                             "f" .=. idLit,
+                                             lit "\"",
+                                             "pf" .<. aX (mXLit (v "f"))]),
+                            seqs [ lit "(",
                                    whts,
-                                   NT "pFator" [g] ["f"],
-                                   Update[("pf",MetaPeg $ MkNot (EVar "f"))] ],
-                            Ann Flat (seqs [ Lit "\"",
-                                             Bind "f" lit,
-                                             Lit "\"",
-                                             Update[("pf",MetaPeg $ MkLit (EVar "f"))]]),
-                            seqs [ Lit "(",
+                                   call "pattern" [g] ["pf"],
                                    whts,
-                                   NT "pattern" [g] ["pf"],
-                                   whts,
-                                   Lit ")"],
-                            seqs [Bind "ntName" rid,
-                                  Update[("pf",MetaPeg $ MkCal (EVar "ntName") [MetaExp (MVar $ Str "g")] [])]],
-                            seqs [Lit "$",
-                                  Update[("pf",MetaPeg $ MkLambda)]]
+                                   lit ")"],
+                            seqs ["ntName" .=. rid,
+                                  "pf" .<. aX (mXCall (v "ntName") [mX (mkVar "g")] [] )],
+                            seqs [lit "$",
+                                  "pf" .<. aX  mkLambda]
 
                            ])
 
+
 ruleExtStmt :: ApegRule
-ruleExtStmt = ApegRule "rStmt"
-                       [(TyLanguage,"g"),(TyMap TyGrammar,"sigma")]
+ruleExtStmt = rule "extBlock"
+                       ["g" .:: tLang, "sigma" .:: (tMap tGrm)]
                        []
                        (seqs [ whts,
-                               Lit "syntax",
-                               Update [("nwSyn",Epsilon)],
+                               lit "syntax",
+                               "nwSyn" .<. eps,
                                whts,
-                               (Bind "n" rid),
-                               Update [("nwSyn",Union (MapAccess (EVar "sigma") (EVar "n")) (EVar "nwSyn"))],
-                               Kle (seqs [whts,
-                                          Lit ",",
+                               "n" .=. rid,
+                               "nwSyn" .<. (((v "sigma") .!. (v "n")) <+: (v "nwSyn")),
+                               star (seqs [whts,
+                                          lit ",",
                                           whts,
-                                          Bind "n" rid,
-                                          Update [("nwSyn",Union (MapAccess (EVar "sigma") (EVar "n")) (EVar "nwSyn"))]
+                                          "n" .=. rid,
+                                          "nwSyn" .<. (((v "sigma") .!. (v "n")) <+: (v "nwSyn"))
                                          ]),
-                               NT "block" [Union g (EVar "nwSyn")] []
+                               call "block" [g <+: (v "nwSyn")] []
                                ] )
 
 
 ruleBlock :: ApegRule
-ruleBlock = ApegRule "block"
-                     [(TyLanguage,"g")]
+ruleBlock = rule "block"
+                     ["g" .:: tLang]
                      []
                      (seqs [whts,
-                            Lit "{",
-                            many1 (NT "stmt" [g] []),
+                            lit "{",
+                            star1 (call "stmt" [g] []),
                             whts,
-                            Lit "}"])
+                            lit "}"])
 
 ruleStmt :: ApegRule
-ruleStmt = ApegRule "stmt"
-                     [(TyLanguage,"g")]
+ruleStmt = rule "stmt"
+                     ["g" .:: tLang]
                      []
                      ( Seq whts
-                           (alts [seqs [Lit "print(", whts, NT "expr" [g] [], whts, Ann Dump (Lit ")"), whts, semic],
-                                  seqs [Lit "read(", whts, identifier , whts, Ann Dump ( Lit ")"), whts, semic],
-                                  seqs [Lit "if(", NT "cexpr" [g] [] ,whts, Ann Dump (Lit ")"), whts ,NT "block" [g] []],
-                                  seqs [Lit "loop(", NT "cexpr" [g] [] ,whts,Ann Dump ( Lit ")"), whts ,NT "block" [g] []],
-                                  seqs [identifier, whts, Lit ":=" ,whts, NT "expr" [g] [] , whts, semic]
+                           (alts [seqs [lit "print(", whts, call "expr" [g] [], whts, Ann Dump (lit ")"), whts, semic],
+                                  seqs [lit "read(", whts, identifier , whts, Ann Dump ( lit ")"), whts, semic],
+                                  seqs [lit "if(", call "cexpr" [g] [] ,whts, Ann Dump (lit ")"), whts ,call "block" [g] []],
+                                  seqs [lit "loop(", call "cexpr" [g] [] ,whts,Ann Dump ( lit ")"), whts ,call "block" [g] []],
+                                  seqs [identifier, whts, lit ":=" ,whts, call "expr" [g] [] , whts, semic]
                                 ]))
 
 ruleExpr :: ApegRule
-ruleExpr = ApegRule "expr"
-                    [(TyLanguage,"g")]
+ruleExpr = rule "expr"
+                    ["g" .:: tLang]
                     []
-                    (seqs [NT "cexpr" [g] [],whts, Kle $ seqs [chrs ['+','-'], whts,  NT "cexpr" [g] []]])
+                    (seqs [call "cexpr" [g] [],whts, star $ seqs [chrs ['+','-'], whts,  call "cexpr" [g] []]])
 
 ruleCExpr :: ApegRule
-ruleCExpr = ApegRule "cexpr"
-                     [(TyLanguage,"g")]
+ruleCExpr = rule "cexpr"
+                     ["g" .:: tLang]
                      []
-                     (seqs [NT "fator" [g] [], whts, Kle $ seqs [chrs ['<','='],whts,  NT "fator" [g] [] ]])
+                     (seqs [call "fator" [g] [], whts, star $ seqs [chrs ['<','='],whts,  call "fator" [g] [] ]])
 
 ruleFator :: ApegRule
-ruleFator = ApegRule "fator"
-                     [(TyLanguage,"g")]
+ruleFator = rule "fator"
+                     ["g" .:: tLang]
                      []
-                     (alts [ seqs [Lit "(", whts, NT "expr" [g] [], whts, Lit ")"],
-                             Lit "true",
-                             Lit "false",
+                     (alts [ seqs [lit "(", whts, call "expr" [g] [], whts, lit ")"],
+                             lit "true",
+                             lit "false",
                              Ann Flat num,
                              identifier
                            ])
 ruleID :: ApegRule
-ruleID = ApegRule "identifier"
-                     [(TyLanguage,"g")]
+ruleID = rule "identifier"
+                     ["g" .:: tLang]
                      []
                      identifier
 
 whiteRule :: ApegRule
-whiteRule = ApegRule "whites"
-                     [(TyLanguage, "g")]
+whiteRule = rule "whites"
+                     ["g" .:: tLang]
                      []
                      (whts)
 
 
 whiteRule1 :: ApegRule
-whiteRule1 = ApegRule "whites1"
-                     [(TyLanguage, "g")]
+whiteRule1 = rule "whites1"
+                     ["g" .:: tLang]
                      []
                      (whts1)
 

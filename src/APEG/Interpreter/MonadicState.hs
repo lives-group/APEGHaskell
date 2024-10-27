@@ -55,6 +55,21 @@ swapResult r = do r' <- get >>= return.getResult
                   modify (\rs-> setResult r rs)
                   return r'
 
+prependResult :: Result -> APegSt ()
+prependResult r = modify (\rs-> setResult (catResult r (getResult rs)) rs)
+
+
+modifyResult :: Result -> APegSt ()
+modifyResult r = modify (\rs-> setResult r rs)
+
+result ::  APegSt (Result)
+result = get >>= return.getResult
+
+mapResult :: ([DT VEnv] -> [DT VEnv]) -> APegSt ()
+mapResult f = do r <- result
+                 modify (setResult (fmap f r))
+
+
 dtRuleBuild :: APegSt () -> APegSt ()
 dtRuleBuild c = do r <- swapResult (Right [])
                    c

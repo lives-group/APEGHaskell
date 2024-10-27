@@ -66,7 +66,20 @@ eps = Epsilon
 
 (|+|) :: Expr -> Expr -> Expr
 (|+|) e1 e2  = BinOp 0 e1 e2
-infixl 5 |+| 
+infixl 4 |+|
+
+(|-|) :: Expr -> Expr -> Expr
+(|-|) e1 e2  = BinOp 1 e1 e2
+infixl 4 |-|
+
+(|<|) :: Expr -> Expr -> Expr
+(|<|) e1 e2  = BinOp 2 e1 e2
+infixl 5 |<|
+
+(|=|) :: Expr -> Expr -> Expr
+(|=|) e1 e2  = BinOp 3 e1 e2
+infixl 5 |=|
+
 
 (<+:) :: Expr -> Expr -> Expr
 (<+:) e1 e2 = Union e1 e2
@@ -81,9 +94,7 @@ npred l = Not l
 (|?|) :: Expr -> APeg -> APeg
 (|?|) e p = Constr e p 
 
-(.!.) ::  Expr -> Expr -> Expr
-(.!.) m i = MapAccess m i
-infixl 6 .!.
+
 
 tInt :: Type
 tInt = TyInt
@@ -119,12 +130,15 @@ tRule xs ys = TyRule xs ys
 (.::) x t = (t,x)
 infixr 7 .::
 
-ins :: Expr -> Expr -> Expr -> Expr 
-ins x y z = MapIns x y z
+mapins :: Expr -> Expr -> Expr -> Expr
+mapins x y z = MapIns x y z
 
 mapvals :: [(Expr,Expr)] -> Expr
 mapvals xs = MapLit xs
 
+(.!.) ::  Expr -> Expr -> Expr
+(.!.) m i = MapAccess m i
+infixl 6 .!.
 
 
 -- -------------------------------------------------------------------------

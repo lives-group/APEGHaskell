@@ -5,10 +5,9 @@ import APEG.Interpreter.MonadicState
 import APEG.Interpreter.State 
 import APEG.Interpreter.Value
 import APEG.Combinators
+import APEG.Interpreter.DT
 import APEG.Interpreter.MaybeString
---import APEG.Combinators
 import qualified Data.Map as M
--- import Data.Either
 import Control.Monad.State.Lazy
 import APEG.TypeSystem
 import Debug.Trace
@@ -146,9 +145,15 @@ mapAccess m  x  = fail (" value: " ++ (show x) ++ " is not a string.")
 
 
 -- 0 = +
+-- 1 = -
+-- 2 = <
+-- 3 = =
 evalBinOp :: Int -> Value -> Value -> APegSt Value
 evalBinOp 0 (VInt x) (VInt y) = return (VInt $ x+y)
-
+evalBinOp 1 (VInt x) (VInt y) = return (VInt $ x-y)
+evalBinOp 2 (VInt x) (VInt y) = return  (VBool $ x < y)
+evalBinOp 3 (VInt x) (VInt y) = return (VBool $ x == y)
+evalBinOp 3 (VBool x) (VBool y) = return (VBool $ x == y)
 
 evalExp :: Expr -> APegSt (Value)
 evalExp (Epsilon) = return (VGrm [])
@@ -183,7 +188,7 @@ evalExp (MapLit xs)  = (mapM (\(s,b) -> do vs <- evalExp s
 evalExp (MapIns m s v)  = do mp  <- evalExp m
                              key <- evalExp s
                              val <- evalExp v
-                             mapInsert mp (varNameFromVal key) val
+                             mapInsert mp (strVal key) val
 evalExp (MapAccess m i) = do mp  <- evalExp m
                              str <- evalExp i
                              mapAcces mp str
@@ -194,14 +199,34 @@ interp (Lambda)       =  done
 interp (Lit s)        = patternMatch s
 interp (NT s inh ret) = do inh' <- (mapM evalExp inh)
                            callNt s inh' ret 
-interp (Kle p)        = klenne (interp p) >> return ()
+--interp (Kle p)        = klenne (interp p) >> return ()
+interp (Kle p)        = klenne (interp p)
 interp (Seq e d)      = sequential (interp e) (interp d)
 interp (Alt e d)      = alternate (interp e) (interp d)
 interp (Not e)        = notPeg (interp e)
 interp (Constr e p)   = evalExp e >>= \b -> constraintApeg b (interp p)
 interp (Update xs)    = mapM_ (\(v,e) -> update v (evalExp e)) xs
 interp (Bind v p)     = bindApeg v (interp p)
+interp (Ann Lift p@(NT _ _ _))   = do r <- result
+                                      modifyResult  (Right [])
+                                      interp p
+                                      mapResult liftvar
+                                      r' <- result
+                                      modifyResult  (catResult r r')
+interp (Ann Flat p)   = do r <- swapResult (Right [])
+                           st <- get
+                           interp p
+                           mapResult (\xs -> [ dtLeaf (valEnv st) (concatMap dtFlat xs)])
+                           prependResult r
+interp (Ann Dump p)   = do r <- swapResult (Right [])
+                           interp p
+                           mapResult (\_ -> [])
+                           prependResult r
 
+liftvar :: [DTV] -> [DTV]
+liftvar [] = []
+liftvar [x] = liftNT x
+liftvar (x:xs) =  x : liftvar xs
 
 execGrm :: TyEnv -> [(Var,Value)] -> ApegGrm ->  APegSt ()
 execGrm ty vs grm@((ApegRule nt _ syn b):_)

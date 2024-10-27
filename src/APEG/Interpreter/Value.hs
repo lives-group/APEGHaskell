@@ -36,7 +36,7 @@ import Debug.Trace
 
 data Value = VStr String
            | VInt Int 
-           | VFloar Float
+           | VFloat Float
            | VBool Bool
            | VMap (M.Map String Value)
            | VLan ApegGrm TyEnv
@@ -108,6 +108,7 @@ typeFromVal (VType t) = t
 -- | Retrives the name of a variable. If the value does not contain an expression, whose is a variable, it will result in a error. 
 varNameFromVal :: Value -> Var
 varNameFromVal (VExp (Str s)) = s
+varNameFromVal v = error ("unexpected : " ++ (show v))
 
 -- | Retrives the APEG expression of a variable. If the value does not contain an APEG expression it will result in a error. 
 apegFromVal :: Value -> APeg

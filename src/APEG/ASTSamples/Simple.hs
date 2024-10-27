@@ -82,7 +82,8 @@ sig2str (s, xs, ys) = s ++ " : " ++
 
 
 simple :: ApegGrm
-simple = [ruleTest, ruleTest2]
+simple = --[ruleTest, ruleTest2]
+        [ruleTest3]
 
 
 ruleTest :: ApegRule
@@ -91,12 +92,24 @@ ruleTest = ApegRule "test"
                     []
                     (seqs [Lit "a", Lit ":", whts1, (Kle (Alt (Lit "a") (Lit "b"))) ])
 
+ruleTestNot :: ApegRule
+ruleTestNot = ApegRule "testNot"
+                    [(TyLanguage,"g")]
+                    []
+                    (seqs [(Not (seqs [Lit "a", Lit "b", Lit "c"])), (seqs [Lit "a", Lit "c", Lit "b"])])
+
 ruleTest2 :: ApegRule
 ruleTest2 =  ApegRule "test2"
                     [(TyLanguage,"g")]
                     []
                     (Kle (Alt (Lit "a") (Lit "b")))
 
+ruleTest3 :: ApegRule
+ruleTest3 =  ApegRule "testBind"
+                    [(TyLanguage,"g")]
+                    []
+                    ( Kle $ seqs [Lit "a",
+                                  Lit "b"])
 
 runS :: FilePath -> IO ()
 runS =  runFile (runGrammar simple [])
@@ -107,6 +120,9 @@ acceptS = runFile (runAccept  simple [])
 debugS :: String -> IO ()
 debugS = runFile (debugRun  simple [])
 
+
+runSS :: String -> IO ()
+runSS s = runGrammar simple [] s
 
 sListRules :: IO ()
 sListRules = mapM_ (putStrLn.sig2str) (signatures simple)

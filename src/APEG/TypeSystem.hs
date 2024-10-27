@@ -116,11 +116,24 @@ mapPair f g (a,b) = do x <- f a
                        y <- g b
                        return (x,y)
                                                           
-                                                                       
--- 0 menas plus 
+
+
+-- 0 means plus
+-- 1 means minus
+-- 2 means less than
+-- 3 means equals
+
 checkBinOp :: String -> Int -> Type -> Type ->  APegSt (TYResult)
 checkBinOp nt 0 TyInt TyInt = return $ pure TyInt  
 checkBinOp nt 0 _ _ =   return $ tyFail ("Plus operation type mismatch "++ nt)
+checkBinOp nt 1 TyInt TyInt = return $ pure TyInt
+checkBinOp nt 1 _ _ =   return $ tyFail ("Minus operation type mismatch "++ nt)
+checkBinOp nt 2 TyInt TyInt = return $ pure TyBool
+checkBinOp nt 2 _ _ =   return $ tyFail ("Less than  operation type mismatch "++ nt)
+checkBinOp nt 3 TyInt TyInt = return $ pure TyBool
+checkBinOp nt 3 TyBool TyBool = return $ pure TyBool
+checkBinOp nt 3 _ _ =   return $ tyFail ("Equals operation type mismatch "++ nt)
+
 
 inferTypeExpr :: NonTerminal -> Expr -> APegSt (TYResult)
 inferTypeExpr nt (Str _)  = return $ pure TyStr
@@ -288,8 +301,7 @@ inferPegType nt p@(Bind v peg) = do tyv <- varTypeOn nt v
                                          (Nothing, Right TyAPeg)    -> recordVarOn nt v TyStr >> return (pure TyAPeg) 
                                          (_, err@(Left _))          -> return err 
                                          _ -> return $ tyFail ("Illegal APEG bind " ++ (show p) ++ " at rule " ++ show nt) 
- 
-
+inferPegType nt p@(Ann _ peg) =  inferPegType nt peg
 
 checkRuleDef :: [Type] -> [Type] -> ApegRule -> APegSt (TYResult)
 checkRuleDef inh syn r@(ApegRule nt inh' syn' peg) 

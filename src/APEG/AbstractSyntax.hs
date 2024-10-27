@@ -17,6 +17,8 @@ type ApegGrm = [ApegRule]
 -- ApegRule  (Name or String) (Inherited Syntatical Parameters)
 data ApegRule = ApegRule NonTerminal [(Type,Var)] [(Type,Expr)] APeg deriving Show
 
+data Annot = Dump | Flat | Lift  deriving (Show,Eq)
+
 data APeg = Lambda                            -- ^ The Lambda Literal
          | Lit String                         -- ^ The String Literal
          | NT NonTerminal [Expr] [Var]
@@ -27,20 +29,21 @@ data APeg = Lambda                            -- ^ The Lambda Literal
          | Update [(Var,Expr)]                           -- The list of attributions of expressions to varaibales
          | Constr Expr APeg
          | Bind Var APeg
+         | Ann Annot APeg
          deriving (Eq,Show)
 
 data Expr = Str String                                    -- string literal
           | ILit Int
           | Epsilon                                       -- The empty grammar
-          | BinOp Int Expr Expr                           -- Arbitrary Binary Operation    
-          | EVar Var                                      -- variable 
+          | BinOp Int Expr Expr                           -- Arbitrary Binary Operation
+          | EVar Var                                      -- variable
           | MetaPeg MAPeg                                 -- meta level PEG
           | MetaExp MExpr                                 -- meta level Expr
           | Union Expr Expr                               -- Uniao Language Language
           | ExtRule Expr Expr Expr                        -- ExtRule  Grammar RuleName Apeg
           | MkRule Expr [(Expr,Expr)] [(Expr, Expr)] Expr -- new non terminal creation
           | MapLit [(Expr,Expr)]                          -- map literal
-          | MapIns Expr Expr Expr                         -- Map insertion method: m[s / v] means MapIns m s v 
+          | MapIns Expr Expr Expr                         -- Map insertion method: m[s / v] means MapIns m s v
           | MapAccess Expr Expr                           -- Map Access method: m[s] = MapAccess m s
           deriving (Show,Eq)
 
